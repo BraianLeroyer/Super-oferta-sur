@@ -1,0 +1,101 @@
+services:
+  # 1. Base de Datos PostgreSQL 16
+  db:
+    image: postgres:16-alpine
+    container_name: laanonima_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: la_anonima_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d la_anonima_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # 2. Redis Cache & Broker para Celery
+  redis:
+    image: redis:7-alpine
+    container_name: laanonima_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # 3. Backend REST API (FastAPI)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: laanonima_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/la_anonima_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # 4. Celery Worker (Tareas Asíncronas de Scraping)
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: laanonima_celery_worker
+    restart: always
+    command: celery -A app.tasks.celery_app worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/la_anonima_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - backend
+
+  # 5. Frontend Portal Público (Astro SSR + Tailwind + React Islas)
+  frontend_public:
+    build:
+      context: ./frontend-public
+      dockerfile: Dockerfile
+    container_name: laanonima_frontend_public
+    restart: always
+    ports:
+      - "4321:4321"
+    environment:
+      - PUBLIC_API_URL=http://localhost:8000/api/v1
+      - INTERNAL_API_URL=http://backend:8000/api/v1
+    depends_on:
+      - backend
+
+  # 6. Frontend Admin Panel (Next.js App Router)
+  frontend_admin:
+    build:
+      context: ./frontend-admin
+      dockerfile: Dockerfile
+    container_name: laanonima_frontend_admin
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - INTERNAL_API_URL=http://backend:8000/api/v1
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

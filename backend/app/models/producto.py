@@ -1,0 +1,19 @@
+from sqlalchemy import Column, Integer, String, Text, DateTime, func, Index
+from sqlalchemy.orm import relationship
+from app.database import Base
+
+class Producto(Base):
+    __tablename__ = "productos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sku = Column(String(100), unique=True, nullable=False, index=True)
+    titulo = Column(String(255), nullable=False)
+    marca = Column(String(100), nullable=True)
+    imagen_url = Column(Text, nullable=True)
+    unidad_medida = Column(String(50), nullable=True)
+    creado_en = Column(DateTime, server_default=func.now())
+    actualizado_en = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    precios_historial = relationship("PrecioHistorial", back_populates="producto", cascade="all, delete-orphan")
+
+Index("idx_productos_sku", Producto.sku)
