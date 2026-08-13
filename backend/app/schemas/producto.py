@@ -8,8 +8,11 @@ class ProductoBase(BaseModel):
     sku: str
     titulo: str
     marca: Optional[str] = None
+    descripcion: Optional[str] = None
     imagen_url: Optional[str] = None
     unidad_medida: Optional[str] = None
+    url_producto: Optional[str] = None
+    categoria: Optional[str] = None
 
 class ProductoCreate(ProductoBase):
     pass

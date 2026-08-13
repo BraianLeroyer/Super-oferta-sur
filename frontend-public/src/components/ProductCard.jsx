@@ -1,7 +1,7 @@
 import React from 'react';
-import { Tag, TrendingDown, ShoppingBag, History, CheckCircle2, XCircle } from 'lucide-react';
+import { Tag, TrendingDown, CheckCircle2, XCircle } from 'lucide-react';
 
-export default function ProductCard({ product, onOpenHistory }) {
+export default function ProductCard({ product }) {
   const hasOffer = Boolean(product.precio_actual_oferta);
   const priceList = Number(product.precio_actual_lista || 0);
   const priceOffer = Number(product.precio_actual_oferta || 0);
@@ -15,9 +15,6 @@ export default function ProductCard({ product, onOpenHistory }) {
       {/* Top badges */}
       <div className="relative p-4 pb-0 flex justify-between items-start">
         <div className="flex flex-col gap-1 items-start">
-          <span className="inline-block px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase bg-slate-100 text-slate-600 rounded">
-            SKU: {product.sku}
-          </span>
           {product.sucursal_nombre && (
             <span className="inline-block px-2 py-0.5 text-[10px] font-bold bg-red-50 text-anonima-red rounded border border-red-100">
               Sucursal {product.sucursal_nombre}
@@ -52,9 +49,22 @@ export default function ProductCard({ product, onOpenHistory }) {
           {product.marca || 'La Anónima'} {product.unidad_medida ? `• ${product.unidad_medida}` : ''}
         </div>
 
-        <h3 className="font-bold text-slate-800 text-sm leading-snug line-clamp-2 mb-2 group-hover:text-anonima-red transition-colors">
+        {product.categoria && (
+          <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 rounded-full text-[10px] font-semibold mb-2 max-w-full truncate">
+            <Tag className="w-2.5 h-2.5 shrink-0" />
+            {product.categoria}
+          </div>
+        )}
+
+        <h3 className="font-bold text-slate-800 text-sm leading-snug line-clamp-2 mb-1 group-hover:text-anonima-red transition-colors">
           {product.titulo}
         </h3>
+
+        {product.descripcion && (
+          <p className="text-[11px] text-slate-500 leading-snug line-clamp-2 mb-2">
+            {product.descripcion}
+          </p>
+        )}
 
         {/* Club La Anónima Tag */}
         {product.es_oferta_club && (
@@ -84,27 +94,17 @@ export default function ProductCard({ product, onOpenHistory }) {
           )}
         </div>
 
-        {/* Stock & History Button */}
-        <div className="flex items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-1">
-            {product.disponible ? (
-              <span className="flex items-center gap-1 text-emerald-600 font-medium">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Stock
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-rose-500 font-medium">
-                <XCircle className="w-3.5 h-3.5" /> Agotado
-              </span>
-            )}
-          </div>
-
-          <button
-            onClick={() => onOpenHistory(product)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 font-semibold rounded-lg hover:bg-slate-100 hover:border-slate-400 text-xs transition-colors shadow-sm"
-          >
-            <History className="w-3.5 h-3.5 text-anonima-red" />
-            Historial
-          </button>
+        {/* Stock */}
+        <div className="flex items-center justify-center gap-1 text-xs">
+          {product.disponible ? (
+            <span className="flex items-center gap-1 text-emerald-600 font-medium">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Stock
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-rose-500 font-medium">
+              <XCircle className="w-3.5 h-3.5" /> Agotado
+            </span>
+          )}
         </div>
       </div>
     </div>

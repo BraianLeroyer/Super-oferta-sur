@@ -1,19 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Header from './Header';
 import ProductCard from './ProductCard';
-import PriceHistoryModal from './PriceHistoryModal';
-import { fetchSucursales, fetchProductos } from '../lib/api';
-import { Filter, SlidersHorizontal, Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import { fetchSucursales, fetchAllProductos, fetchCategorias } from '../lib/api';
+import { Filter, Search, Loader2, Sparkles, AlertCircle, ChevronDown } from 'lucide-react';
+
+const PAGE_INCREMENT = 60;
 
 export default function ProductCatalogApp() {
   const [branches, setBranches] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [onlyOffers, setOnlyOffers] = useState(false);
-  const [maxPriceFilter, setMaxPriceFilter] = useState('');
-  const [selectedProductForHistory, setSelectedProductForHistory] = useState(null);
+  const [categorias, setCategorias] = useState([]);
+  const [selectedCategoria, setSelectedCategoria] = useState('');
+  const [visibleCount, setVisibleCount] = useState(PAGE_INCREMENT);
+  const searchSeqRef = useRef(0);
 
   // Cargar sucursales iniciales
   useEffect(() => {
@@ -27,31 +31,44 @@ export default function ProductCatalogApp() {
         }
       })
       .catch(console.error);
+
+    fetchCategorias().then(setCategorias).catch(console.error);
   }, []);
+
+  // Debounce del buscador (300ms) para no disparar un request por tecla
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   // Cargar productos al cambiar filtros o sucursal
   useEffect(() => {
+    const seq = ++searchSeqRef.current;
     setLoading(true);
     const params = {
-      search: searchQuery || undefined,
+      search: debouncedSearch || undefined,
       sucursal_id: selectedBranch ? selectedBranch.id : undefined,
-      max_price: maxPriceFilter ? Number(maxPriceFilter) : undefined
+      categoria: selectedCategoria || undefined
     };
 
-    fetchProductos(params)
+    fetchAllProductos(params)
       .then((data) => {
+        // Ignorar respuestas obsoletas (race condition entre requests)
+        if (seq !== searchSeqRef.current) return;
         let filtered = data;
         if (onlyOffers) {
           filtered = data.filter(p => Boolean(p.precio_actual_oferta));
         }
         setProducts(filtered);
+        setVisibleCount(PAGE_INCREMENT);
         setLoading(false);
       })
       .catch((err) => {
+        if (seq !== searchSeqRef.current) return;
         console.error(err);
         setLoading(false);
       });
-  }, [selectedBranch, searchQuery, onlyOffers, maxPriceFilter]);
+  }, [selectedBranch, debouncedSearch, onlyOffers, selectedCategoria]);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -60,8 +77,6 @@ export default function ProductCatalogApp() {
         selectedBranch={selectedBranch}
         branches={branches}
         onSelectBranch={setSelectedBranch}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
       />
 
       {/* Hero / Filter Bar */}
@@ -114,63 +129,95 @@ export default function ProductCatalogApp() {
             >
               🔥 Solo Ofertas
             </button>
-          </div>
 
-          {/* Max price filter input */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <span className="text-xs font-semibold text-slate-500">Precio Máximo $:</span>
-            <input
-              type="number"
-              placeholder="Ej: 5000"
-              value={maxPriceFilter}
-              onChange={(e) => setMaxPriceFilter(e.target.value)}
-              className="w-32 px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-anonima-red bg-slate-50 font-medium"
-            />
-            {maxPriceFilter && (
-              <button
-                onClick={() => setMaxPriceFilter('')}
-                className="text-xs text-slate-400 hover:text-slate-600 font-bold underline"
-              >
-                Limpiar
-              </button>
-            )}
+            <select
+              value={selectedCategoria}
+              onChange={(e) => setSelectedCategoria(e.target.value)}
+              className="px-3 py-2 rounded-lg text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-anonima-red max-w-[220px]"
+            >
+              <option value="">Todas las Categorías</option>
+              {categorias.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
           </div>
+        </div>
+
+        {/* Search Bar Grande (filtra por nombre de producto) */}
+        <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+          <label className="flex items-center gap-2 text-xs font-bold text-slate-700 mb-2">
+            <Search className="w-4 h-4 text-anonima-red" />
+            Buscar producto por nombre
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+              <Search className="w-5 h-5" />
+            </div>
+            <input
+              type="text"
+              placeholder="Escribí el nombre del producto que buscás (ej: leche, iphone, vino tinto)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-11 pr-4 py-3.5 text-base bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-anonima-red focus:border-transparent transition-all"
+            />
+          </div>
+          {searchQuery && (
+            <div className="mt-2 text-xs font-semibold text-slate-500">
+              {products.length} resultado{products.length === 1 ? '' : 's'} para «{searchQuery}»
+            </div>
+          )}
         </div>
 
         {/* Product Grid */}
         {loading ? (
           <div className="py-24 flex flex-col items-center justify-center gap-3">
             <Loader2 className="w-10 h-10 animate-spin text-anonima-red" />
-            <span className="text-xs font-bold text-slate-500">Consultando catálogo e historial de precios...</span>
+            <span className="text-xs font-bold text-slate-500">Consultando catálogo de precios...</span>
           </div>
         ) : products.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-sm flex flex-col items-center gap-3 max-w-md mx-auto my-12">
             <AlertCircle className="w-12 h-12 text-slate-300" />
             <h3 className="font-extrabold text-slate-800 text-lg">No se encontraron productos</h3>
             <p className="text-xs text-slate-500">
-              No hay coincidencias para los filtros aplicados en la sucursal seleccionada. Prueba cambiando la sucursal o limpiando el buscador.
+              {onlyOffers && debouncedSearch
+                ? `No hay ofertas que coincidan con «${debouncedSearch}» en la sucursal seleccionada. Probá desactivar el filtro "Solo Ofertas" para ver todos los resultados.`
+                : onlyOffers
+                  ? 'No hay productos en oferta que coincidan con los filtros aplicados. Probá desactivar el filtro "Solo Ofertas".'
+                  : 'No hay coincidencias para los filtros aplicados en la sucursal seleccionada. Prueba cambiando la sucursal o limpiando el buscador.'}
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-            {products.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                onOpenHistory={setSelectedProductForHistory}
-              />
-            ))}
-          </div>
+          <>
+            <div className="flex items-center justify-between gap-2 text-xs text-slate-500 font-semibold flex-wrap">
+              <span>
+                Mostrando {Math.min(visibleCount, products.length)} de {products.length} productos
+              </span>
+              {visibleCount < products.length && (
+                <span className="text-anonima-red">{products.length - visibleCount} sin mostrar</span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+              {products.slice(0, visibleCount).map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                />
+              ))}
+            </div>
+            {visibleCount < products.length && (
+              <div className="flex justify-center pt-4">
+                <button
+                  onClick={() => setVisibleCount(v => v + PAGE_INCREMENT)}
+                  className="flex items-center gap-2 px-6 py-3 bg-anonima-red hover:bg-anonima-darkred text-white text-sm font-bold rounded-xl shadow transition-colors"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                  Cargar más ({Math.min(PAGE_INCREMENT, products.length - visibleCount)})
+                </button>
+              </div>
+            )}
+          </>
         )}
       </main>
-
-      {/* Price History Modal Island */}
-      {selectedProductForHistory && (
-        <PriceHistoryModal
-          product={selectedProductForHistory}
-          onClose={() => setSelectedProductForHistory(null)}
-        />
-      )}
     </div>
   );
 }

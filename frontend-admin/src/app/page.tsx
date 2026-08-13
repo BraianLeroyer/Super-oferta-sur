@@ -36,7 +36,7 @@ export default function DashboardPage() {
     e.preventDefault();
     setTriggering(true);
     setTriggerMessage(null);
-    const res = await triggerScraper(selectedSucursal, 30);
+    const res = await triggerScraper(selectedSucursal, 50);
     setTriggering(false);
     if (res) {
       setTriggerMessage(`✅ Tarea de raspado enviada para ${selectedSucursal} (ID: ${res.id.slice(0, 8)})`);

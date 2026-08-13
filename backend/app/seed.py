@@ -4,6 +4,7 @@ from app.database import SessionLocal, engine, Base
 from app.models import Sucursal, Producto, PrecioHistorial, ScraperJob
 from app.tasks.scraper_tasks import run_scraper_job_task
 from app.scraper.sucursal_session import SUCURSALES_DATA
+from app.scraper.catalogo import PRODUCTOS_CATALOGO_BASE
 import uuid
 
 logging.basicConfig(level=logging.INFO)
@@ -29,14 +30,26 @@ def seed_database():
         db.commit()
 
         # 2. Ejecutar raspado inicial para popular la DB con productos y precios
+        #    Se siembra el catálogo COMPLETO (todas las categorías) por sucursal.
+        seed_limit = len(PRODUCTOS_CATALOGO_BASE)
+        logger.info(f"Seeding del catálogo completo: {seed_limit} productos por sucursal.")
         sucursales = db.query(Sucursal).all()
         for suc in sucursales:
             # Comprobar si ya existen productos para esta sucursal
             precios_count = db.query(PrecioHistorial).filter(PrecioHistorial.sucursal_id == suc.id).count()
             if precios_count == 0:
                 logger.info(f"Poblando datos de productos para sucursal {suc.nombre}...")
-                job_id = str(uuid.uuid4())
-                run_scraper_job_task(job_id, suc.nombre, limit=15)
+                job_id = uuid.uuid4()
+                job = ScraperJob(
+                    id=job_id,
+                    sucursal_id=suc.id,
+                    estado="PENDING",
+                    total_scrapeados=0,
+                    total_errores=0
+                )
+                db.add(job)
+                db.commit()
+                run_scraper_job_task(str(job_id), suc.nombre, limit=seed_limit)
 
         logger.info("¡Seeding completado con éxito!")
     except Exception as e:

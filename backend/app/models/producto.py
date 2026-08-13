@@ -9,8 +9,11 @@ class Producto(Base):
     sku = Column(String(100), unique=True, nullable=False, index=True)
     titulo = Column(String(255), nullable=False)
     marca = Column(String(100), nullable=True)
+    descripcion = Column(Text, nullable=True)
     imagen_url = Column(Text, nullable=True)
     unidad_medida = Column(String(50), nullable=True)
+    url_producto = Column(Text, nullable=True)
+    categoria = Column(String(200), nullable=True)
     creado_en = Column(DateTime, server_default=func.now())
     actualizado_en = Column(DateTime, server_default=func.now(), onupdate=func.now())
 

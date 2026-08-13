@@ -5,6 +5,8 @@ echo "Esperando a la base de datos PostgreSQL..."
 python -c "
 import time, psycopg2, os
 db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@db:5432/la_anonima_db')
+# psycopg2 no acepta el prefijo SQLAlchemy 'postgresql+psycopg2://'
+db_url = db_url.replace('postgresql+psycopg2://', 'postgresql://')
 for i in range(30):
     try:
         conn = psycopg2.connect(db_url)
@@ -17,6 +19,6 @@ for i in range(30):
 "
 
 echo "Ejecutando Seeding e Inicialización..."
-python app/seed.py
+python -m app.seed
 
 exec "$@"

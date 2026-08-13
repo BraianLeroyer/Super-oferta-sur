@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: la_anonima_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -58,7 +58,9 @@ services:
       dockerfile: Dockerfile
     container_name: laanonima_celery_worker
     restart: always
-    command: celery -A app.tasks.celery_app worker --loglevel=info
+    # Solo el backend ejecuta el entrypoint (espera DB + seed); el worker salta el seeding
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["celery -A app.tasks.celery_app worker --loglevel=info"]
     environment:
       - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/la_anonima_db
       - REDIS_URL=redis://redis:6379/0

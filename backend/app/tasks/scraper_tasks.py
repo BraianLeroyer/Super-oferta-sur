@@ -51,6 +51,7 @@ def run_scraper_job_task(job_id_str: str, sucursal_query: str, limit: int = 30):
 
         total_scraped = 0
         total_errors = 0
+        commit_every = 200
 
         for item in extracted_items:
             try:
@@ -61,20 +62,27 @@ def run_scraper_job_task(job_id_str: str, sucursal_query: str, limit: int = 30):
                         sku=item["sku"],
                         titulo=item["titulo"],
                         marca=item.get("marca"),
+                        descripcion=item.get("descripcion"),
                         imagen_url=item.get("imagen_url"),
-                        unidad_medida=item.get("unidad_medida")
+                        unidad_medida=item.get("unidad_medida"),
+                        url_producto=item.get("url_producto"),
+                        categoria=item.get("categoria")
                     )
                     db.add(producto)
-                    db.commit()
-                    db.refresh(producto)
+                    db.flush()
                 else:
                     # Actualizar info si cambió
                     producto.titulo = item["titulo"]
                     if item.get("marca"):
                         producto.marca = item.get("marca")
+                    if item.get("descripcion"):
+                        producto.descripcion = item.get("descripcion")
                     if item.get("imagen_url"):
                         producto.imagen_url = item.get("imagen_url")
-                    db.commit()
+                    if item.get("url_producto"):
+                        producto.url_producto = item.get("url_producto")
+                    if item.get("categoria"):
+                        producto.categoria = item.get("categoria")
 
                 # Crear nuevo registro de historial de precio
                 precio_hist = PrecioHistorial(
@@ -87,12 +95,15 @@ def run_scraper_job_task(job_id_str: str, sucursal_query: str, limit: int = 30):
                     fecha_captura=datetime.utcnow()
                 )
                 db.add(precio_hist)
-                db.commit()
 
                 total_scraped += 1
+                if total_scraped % commit_every == 0:
+                    db.commit()
             except Exception as item_err:
                 db.rollback()
                 total_errors += 1
+
+        db.commit()
 
         job.estado = "FINISHED"
         job.total_scrapeados = total_scraped

@@ -32,8 +32,11 @@ export interface Producto {
   sku: string;
   titulo: string;
   marca: string | null;
+  descripcion: string | null;
   imagen_url: string | null;
   unidad_medida: string | null;
+  url_producto?: string | null;
+  categoria?: string | null;
   precio_actual_lista: number | null;
   precio_actual_oferta: number | null;
   sucursal_nombre?: string;
@@ -61,7 +64,7 @@ export async function fetchSucursales(): Promise<Sucursal[]> {
   }
 }
 
-export async function triggerScraper(sucursal: string, limite_productos: number = 30): Promise<ScraperJob | null> {
+export async function triggerScraper(sucursal: string, limite_productos: number = 50): Promise<ScraperJob | null> {
   try {
     const res = await fetch(`${API_BASE_URL}/scraper/trigger`, {
       method: 'POST',
@@ -78,9 +81,18 @@ export async function triggerScraper(sucursal: string, limite_productos: number 
 
 export async function fetchProductosAdmin(): Promise<Producto[]> {
   try {
-    const res = await fetch(`${API_BASE_URL}/products?limit=100`, { cache: 'no-store' });
-    if (!res.ok) return [];
-    return await res.json();
+    const all: Producto[] = [];
+    let page = 1;
+    const pageSize = 500;
+    while (true) {
+      const res = await fetch(`${API_BASE_URL}/products?page=${page}&limit=${pageSize}`, { cache: 'no-store' });
+      if (!res.ok) break;
+      const batch = await res.json();
+      all.push(...batch);
+      if (batch.length < pageSize) break;
+      page += 1;
+    }
+    return all;
   } catch (err) {
     console.error('Error cargando productos admin:', err);
     return [];

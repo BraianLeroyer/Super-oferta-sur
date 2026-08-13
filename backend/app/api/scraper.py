@@ -49,9 +49,9 @@ def trigger_scraper(
 
     # Intentar enviar la tarea a Celery. Si Celery/Redis no estuviera listo, se ejecuta via BackgroundTasks de FastAPI
     try:
-        run_scraper_job_task.delay(str(job_id), payload.sucursal, payload.limite_productos or 30)
+        run_scraper_job_task.delay(str(job_id), payload.sucursal, payload.limite_productos or 100)
     except Exception:
-        background_tasks.add_task(run_scraper_job_task, str(job_id), payload.sucursal, payload.limite_productos or 30)
+        background_tasks.add_task(run_scraper_job_task, str(job_id), payload.sucursal, payload.limite_productos or 100)
 
     return job
 

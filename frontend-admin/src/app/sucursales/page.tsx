@@ -22,7 +22,7 @@ export default function SucursalesPage() {
 
   const handleTriggerBranch = async (suc: Sucursal) => {
     setActiveJobMsg(prev => ({ ...prev, [suc.id]: 'Enviando...' }));
-    const res = await triggerScraper(suc.nombre, 40);
+    const res = await triggerScraper(suc.nombre, 50);
     if (res) {
       setActiveJobMsg(prev => ({ ...prev, [suc.id]: `✅ Tarea ${res.id.slice(0, 6)} iniciada` }));
     } else {

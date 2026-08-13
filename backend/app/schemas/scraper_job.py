@@ -6,7 +6,7 @@ from app.schemas.sucursal import SucursalOut
 
 class ScraperTriggerRequest(BaseModel):
     sucursal: str # Puede ser el nombre (ej: "Trelew", "Rawson") o el codigo_sucursal ("RAWSON_01")
-    limite_productos: Optional[int] = 50
+    limite_productos: Optional[int] = 100
 
 class ScraperJobOut(BaseModel):
     id: UUID

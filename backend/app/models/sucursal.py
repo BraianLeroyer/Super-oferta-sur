@@ -5,7 +5,7 @@ from app.database import Base
 class Sucursal(Base):
     __tablename__ = "sucursales"
 
-    id = Column(Integer, primary_order=True, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)
     codigo_sucursal = Column(String(50), unique=True, nullable=False, index=True)
     nombre = Column(String(150), nullable=False)
     provincia = Column(String(100), server_default="Chubut")
