@@ -126,9 +126,17 @@ export default function ProductCatalogApp() {
   }, [selectedBranch, debouncedSearch, onlyOffers, selectedCategoria]);
 
   const selectSuggestion = (product) => {
+    suggestionSeqRef.current++;
     setSearchQuery(product.titulo);
     setShowSuggestions(false);
     setSuggestions([]);
+    setSelectedCategoria('');
+  };
+
+  const handleSearchSubmit = () => {
+    suggestionSeqRef.current++;
+    setShowSuggestions(false);
+    setDebouncedSearch(searchQuery);
   };
 
   return (
@@ -211,7 +219,7 @@ export default function ProductCatalogApp() {
         </div>
 
         {/* Search Bar Grande (filtra por nombre de producto) */}
-        <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+        <div className="bg-white rounded-xl p-3 sm:p-4 border border-slate-200 shadow-sm">
           <label className="flex items-center gap-2 text-xs font-bold text-slate-700 mb-2">
             <Search className="w-4 h-4 text-anonima-red" />
             Buscar producto por nombre
@@ -226,8 +234,19 @@ export default function ProductCatalogApp() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-              className="w-full pl-11 pr-4 py-3.5 text-base bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-anonima-red focus:border-transparent transition-all"
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSearchSubmit(); }}
+              className="w-full pl-11 pr-14 py-3 sm:py-3.5 text-sm sm:text-base bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-anonima-red focus:border-transparent transition-all"
             />
+
+            <button
+              type="button"
+              onClick={handleSearchSubmit}
+              aria-label="Buscar"
+              title="Buscar"
+              className="absolute inset-y-0 right-1.5 my-auto w-9 h-9 flex items-center justify-center rounded-lg bg-anonima-red text-white hover:bg-darkred active:scale-95 transition-all shadow-sm"
+            >
+              <Search className="w-5 h-5" />
+            </button>
 
             {/* Sugerencias de Almacén (autocompletado) */}
             {showSuggestions && suggestions.length > 0 && (
@@ -279,7 +298,7 @@ export default function ProductCatalogApp() {
             )}
 
             {suggestionsLoading && (
-              <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none">
+              <div className="absolute inset-y-0 right-14 flex items-center pointer-events-none">
                 <Loader2 className="w-4 h-4 animate-spin text-anonima-red" />
               </div>
             )}
