@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Header from './Header';
 import ProductCard from './ProductCard';
-import { fetchSucursales, fetchAllProductos, fetchCategorias } from '../lib/api';
-import { Filter, Search, Loader2, Sparkles, AlertCircle, ChevronDown } from 'lucide-react';
+import ProductDetailModal from './ProductDetailModal';
+import { fetchSucursales, fetchAllProductos, fetchCategorias, fetchSuggestions } from '../lib/api';
+import { Filter, Search, Loader2, Sparkles, AlertCircle, ChevronDown, ShieldCheck } from 'lucide-react';
 
 const PAGE_INCREMENT = 60;
 
@@ -17,7 +18,13 @@ export default function ProductCatalogApp() {
   const [categorias, setCategorias] = useState([]);
   const [selectedCategoria, setSelectedCategoria] = useState('');
   const [visibleCount, setVisibleCount] = useState(PAGE_INCREMENT);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const searchSeqRef = useRef(0);
+  const suggestionSeqRef = useRef(0);
+  const searchBoxRef = useRef(null);
 
   // Cargar sucursales iniciales
   useEffect(() => {
@@ -40,6 +47,54 @@ export default function ProductCatalogApp() {
     const t = setTimeout(() => setDebouncedSearch(searchQuery), 300);
     return () => clearTimeout(t);
   }, [searchQuery]);
+
+  // Sugerencias de Almacén mientras se tipea (debounce 250ms, mínimo 2 caracteres)
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (query.length < 2) {
+      suggestionSeqRef.current++;
+      setSuggestions([]);
+      setShowSuggestions(false);
+      setSuggestionsLoading(false);
+      return;
+    }
+    const t = setTimeout(() => {
+      const seq = ++suggestionSeqRef.current;
+      setSuggestionsLoading(true);
+      fetchSuggestions(query, selectedBranch ? selectedBranch.id : undefined, 8)
+        .then((data) => {
+          if (seq !== suggestionSeqRef.current) return;
+          setSuggestions(data);
+          setShowSuggestions(true);
+        })
+        .catch((err) => {
+          if (seq !== suggestionSeqRef.current) return;
+          console.error(err);
+        })
+        .finally(() => {
+          if (seq === suggestionSeqRef.current) setSuggestionsLoading(false);
+        });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [searchQuery, selectedBranch]);
+
+  // Cerrar dropdown al hacer clic fuera o presionar Escape
+  useEffect(() => {
+    const onDown = (e) => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') setShowSuggestions(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, []);
 
   // Cargar productos al cambiar filtros o sucursal
   useEffect(() => {
@@ -70,6 +125,12 @@ export default function ProductCatalogApp() {
       });
   }, [selectedBranch, debouncedSearch, onlyOffers, selectedCategoria]);
 
+  const selectSuggestion = (product) => {
+    setSearchQuery(product.titulo);
+    setShowSuggestions(false);
+    setSuggestions([]);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Top Header React Island */}
@@ -92,8 +153,14 @@ export default function ProductCatalogApp() {
               Precios en {selectedBranch ? selectedBranch.nombre : 'Todas las Sucursales'}
             </h2>
             <p className="text-xs text-slate-300 max-w-xl">
-              Comparativa de precios de lista, precios de oferta y Club La Anónima. Monitoreo diario por ubicación geográfica en Chubut y Patagonia.
+              Comparativa de precios de lista y ofertas en Chubut y Patagonia. Monitoreo diario por ubicación geográfica. Hacé clic en un producto para ver sus detalles.
             </p>
+            {onlyOffers && (
+              <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-red-300">
+                <ShieldCheck className="w-4 h-4" />
+                Las mismas ofertas están vigentes en todas las sucursales de Chubut y Patagonia.
+              </p>
+            )}
           </div>
 
           <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4 flex items-center gap-4 text-center">
@@ -149,7 +216,7 @@ export default function ProductCatalogApp() {
             <Search className="w-4 h-4 text-anonima-red" />
             Buscar producto por nombre
           </label>
-          <div className="relative">
+          <div ref={searchBoxRef} className="relative">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
               <Search className="w-5 h-5" />
             </div>
@@ -158,8 +225,64 @@ export default function ProductCatalogApp() {
               placeholder="Escribí el nombre del producto que buscás (ej: leche, iphone, vino tinto)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
               className="w-full pl-11 pr-4 py-3.5 text-base bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-anonima-red focus:border-transparent transition-all"
             />
+
+            {/* Sugerencias de Almacén (autocompletado) */}
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute z-30 mt-2 w-full bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
+                <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-anonima-red" />
+                  Sugerencias de Almacén
+                </div>
+                <ul className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                  {suggestions.map((p) => {
+                    const priceOffer = Number(p.precio_actual_oferta || 0);
+                    const priceList = Number(p.precio_actual_lista || 0);
+                    const showOffer = Boolean(p.precio_actual_oferta);
+                    return (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          onClick={() => selectSuggestion(p)}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-red-50 transition-colors"
+                        >
+                          <img
+                            src={p.imagen_url || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=80'}
+                            alt={p.titulo}
+                            loading="lazy"
+                            className="w-10 h-10 object-contain shrink-0 bg-slate-50 rounded-lg border border-slate-100 p-1 mix-blend-multiply"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=80';
+                            }}
+                          />
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-bold text-slate-800 truncate">
+                              {p.titulo}
+                            </span>
+                            <span className="block text-xs text-slate-500 truncate">
+                              {p.marca ? p.marca.toUpperCase() : 'La Anónima'}
+                              {p.unidad_medida ? ` • ${p.unidad_medida}` : ''}
+                            </span>
+                          </span>
+                          <span className={`text-sm font-extrabold shrink-0 ${showOffer ? 'text-anonima-red' : 'text-slate-900'}`}>
+                            ${(showOffer ? priceOffer : priceList).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
+            {suggestionsLoading && (
+              <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none">
+                <Loader2 className="w-4 h-4 animate-spin text-anonima-red" />
+              </div>
+            )}
           </div>
           {searchQuery && (
             <div className="mt-2 text-xs font-semibold text-slate-500">
@@ -196,11 +319,12 @@ export default function ProductCatalogApp() {
                 <span className="text-anonima-red">{products.length - visibleCount} sin mostrar</span>
               )}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 lg:gap-8">
               {products.slice(0, visibleCount).map((product) => (
                 <ProductCard
                   key={product.id}
                   product={product}
+                  onSelect={setSelectedProduct}
                 />
               ))}
             </div>
@@ -218,6 +342,14 @@ export default function ProductCatalogApp() {
           </>
         )}
       </main>
+
+      {/* Modal de detalle con view transition */}
+      {selectedProduct && (
+        <ProductDetailModal
+          product={selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+        />
+      )}
     </div>
   );
 }

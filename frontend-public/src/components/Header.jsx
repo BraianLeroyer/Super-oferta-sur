@@ -12,7 +12,7 @@ export default function Header({
       <div className="bg-anonima-red text-white py-1.5 px-4 text-xs font-semibold flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Tag className="w-3.5 h-3.5" />
-          <span>Monitor de Precios y Sucursales - Supermercados La Anónima</span>
+          <span>Monitor de Precios y Sucursales - Ofertas Sur</span>
         </div>
         <div className="hidden sm:flex items-center gap-4 text-xs text-red-100">
           <a href="http://localhost:3000" target="_blank" rel="noreferrer" className="hover:text-white flex items-center gap-1 font-medium bg-anonima-darkred px-2 py-0.5 rounded">
@@ -26,14 +26,14 @@ export default function Header({
         {/* Brand / Logo */}
         <div className="flex items-center gap-3 w-full md:w-auto justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-anonima-red rounded-lg flex items-center justify-center text-white font-extrabold text-xl shadow">
-              LA
+            <div className="w-10 h-10 bg-gradient-to-br from-anonima-red to-anonima-darkred rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-red-900/20">
+              OS
             </div>
             <div>
               <h1 className="text-xl font-extrabold text-slate-900 tracking-tight leading-none">
-                La Anónima <span className="text-anonima-red">Precios</span>
+                Ofertas <span className="text-anonima-red">Sur</span>
               </h1>
-              <p className="text-xs text-slate-500 font-medium">Catalogo por Sucursal (Chubut / Patagonia)</p>
+              <p className="text-xs text-slate-500 font-medium">Catálogo por Sucursal (Chubut / Patagonia)</p>
             </div>
           </div>
         </div>

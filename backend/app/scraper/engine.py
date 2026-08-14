@@ -115,7 +115,6 @@ class LaAnonimaScraper:
             nombre = attr("data-nombre")
             marca = attr("data-marca")
             precio_raw = attr("data-precio")
-            existencia = attr("data-existencia-super")
             rutas = attr("data-rutacategorias")
             img = re.search(r'<img[^>]*data-src="([^"]+)"', chunk)
             img = img.group(1) if img else ""
@@ -154,7 +153,7 @@ class LaAnonimaScraper:
                 "precio_lista": round(precio_lista, 2),
                 "precio_oferta": round(precio_oferta, 2) if precio_oferta else None,
                 "es_oferta_club": bool(re.search(r"promocion\d+-off", chunk)),
-                "disponible": existencia == "S"
+                "disponible": True
             })
         return products
 
@@ -229,7 +228,7 @@ class LaAnonimaScraper:
                     "precio_lista": base_p,
                     "precio_oferta": precio_oferta,
                     "es_oferta_club": prod.get("es_club", False),
-                    "disponible": random.choice([True, True, True, False])
+                    "disponible": True
                 })
 
         logger.info(f"Extracción finalizada para {self.sucursal_config['nombre']}: {len(extracted_products)} productos procesados.")

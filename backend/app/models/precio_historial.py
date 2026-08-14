@@ -4,6 +4,9 @@ from app.database import Base
 
 class PrecioHistorial(Base):
     __tablename__ = "precios_historial"
+    __table_args__ = (
+        Index("idx_precios_producto_fecha", "producto_id", "fecha_captura"),
+    )
 
     id = Column(BigInteger, primary_key=True, index=True)
     producto_id = Column(Integer, ForeignKey("productos.id", ondelete="CASCADE"), nullable=False)

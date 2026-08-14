@@ -96,16 +96,15 @@ export async function fetchAllProductos(params: {
   sucursal_id?: number;
   sucursal?: string;
 }, maxItems: number = 25000): Promise<Producto[]> {
-  const all: Producto[] = [];
-  let page = 1;
-  while (all.length < maxItems) {
-    const batch = await fetchProductos({ ...params, page, limit: PAGE_SIZE });
-    if (batch.length === 0) break;
-    all.push(...batch);
-    if (batch.length < PAGE_SIZE) break;
-    page += 1;
-  }
-  return all;
+  // Páginas en PARALELO (Promise.all) para no esperar 33 roundtrips secuenciales.
+  // Se piden hasta ceil(maxItems/PAGE_SIZE) páginas; las que no existen devuelven [].
+  const maxPages = Math.ceil(maxItems / PAGE_SIZE);
+  const batches = await Promise.all(
+    Array.from({ length: maxPages }, (_, i) =>
+      fetchProductos({ ...params, page: i + 1, limit: PAGE_SIZE })
+    )
+  );
+  return batches.flat().slice(0, maxItems);
 }
 
 export async function fetchCategorias(): Promise<string[]> {
@@ -115,6 +114,25 @@ export async function fetchCategorias(): Promise<string[]> {
     return await res.json();
   } catch (err) {
     console.error('Error cargando categorías:', err);
+    return [];
+  }
+}
+
+export async function fetchSuggestions(
+  q: string,
+  sucursal_id?: number,
+  limit: number = 8
+): Promise<Producto[]> {
+  try {
+    const query = new URLSearchParams();
+    query.set('q', q);
+    query.set('limit', limit.toString());
+    if (sucursal_id) query.set('sucursal_id', sucursal_id.toString());
+    const res = await fetch(`${API_BASE_URL}/products/suggestions?${query.toString()}`);
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (err) {
+    console.error('Error cargando sugerencias:', err);
     return [];
   }
 }

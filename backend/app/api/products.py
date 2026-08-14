@@ -29,6 +29,26 @@ def _accent_insensitive_pattern(term: str) -> str:
             out.append(re.escape(lower))
     return ''.join(out)
 
+
+def _latest_price_map(db: Session, product_ids: List[int], sucursal_id: Optional[int]) -> dict:
+    """Último precio por producto en UNA sola consulta (DISTINCT ON), evitando el N+1."""
+    if not product_ids:
+        return {}
+    price_query = db.query(PrecioHistorial).filter(PrecioHistorial.producto_id.in_(product_ids))
+    if sucursal_id:
+        price_query = price_query.filter(PrecioHistorial.sucursal_id == sucursal_id)
+    latest_prices = (
+        price_query
+        .order_by(
+            PrecioHistorial.producto_id,
+            desc(PrecioHistorial.fecha_captura),
+            desc(PrecioHistorial.id),
+        )
+        .distinct(PrecioHistorial.producto_id)
+        .all()
+    )
+    return {ph.producto_id: ph for ph in latest_prices}
+
 @router.get("", response_model=List[ProductoOut])
 def get_products(
     search: Optional[str] = None,
@@ -80,15 +100,13 @@ def get_products(
     # Paginación
     offset = (page - 1) * limit
     productos = query.order_by(Producto.id.asc()).offset(offset).limit(limit).all()
+    product_ids = [prod.id for prod in productos]
+
+    latest_by_product = _latest_price_map(db, product_ids, selected_sucursal_id)
 
     result = []
     for prod in productos:
-        # Buscar el último precio registrado para este producto
-        price_query = db.query(PrecioHistorial).filter(PrecioHistorial.producto_id == prod.id)
-        if selected_sucursal_id:
-            price_query = price_query.filter(PrecioHistorial.sucursal_id == selected_sucursal_id)
-
-        latest_price = price_query.order_by(desc(PrecioHistorial.fecha_captura)).first()
+        latest_price = latest_by_product.get(prod.id)
 
         # Si hay filtro por precio
         if latest_price:
@@ -118,6 +136,66 @@ def get_products(
         }
         result.append(prod_dict)
 
+    return result
+
+@router.get("/suggestions", response_model=List[ProductoOut])
+def get_product_suggestions(
+    q: Optional[str] = Query(None, min_length=2, description="Texto a sugerir (rubro Almacén)"),
+    sucursal_id: Optional[int] = None,
+    limit: int = Query(8, ge=1, le=15),
+    db: Session = Depends(get_db)
+):
+    """
+    GET /api/v1/products/suggestions
+    Sugerencias de autocompletado SOLO del rubro Almacén (categoría empieza con "Almacén").
+    Cada fila trae título, marca, unidad de medida, imagen y último precio (por sucursal si se pasa).
+    """
+    query = db.query(Producto).filter(Producto.categoria.ilike("Almacén%"))
+
+    if q:
+        tokens = [t for t in q.split() if t]
+        for token in tokens:
+            pattern = _accent_insensitive_pattern(token)
+            query = query.filter(
+                Producto.titulo.op('~*')(pattern)
+                | Producto.marca.op('~*')(pattern)
+                | Producto.sku.op('~*')(re.escape(token))
+            )
+
+    # Prioriza productos cuyo TÍTULO EMPIEZA con el término (ej: "arroz" -> "Arroz ..." antes que "Chocoarroz")
+    if q:
+        first_token = [t for t in q.split() if t][0]
+        starts_with = Producto.titulo.op('~*')('^' + _accent_insensitive_pattern(first_token))
+        productos = query.order_by(
+            starts_with.desc(),
+            Producto.titulo.asc()
+        ).limit(limit).all()
+    else:
+        productos = query.order_by(Producto.titulo.asc()).limit(limit).all()
+    product_ids = [prod.id for prod in productos]
+    latest_by_product = _latest_price_map(db, product_ids, sucursal_id)
+
+    result = []
+    for prod in productos:
+        latest_price = latest_by_product.get(prod.id)
+        result.append({
+            "id": prod.id,
+            "sku": prod.sku,
+            "titulo": prod.titulo,
+            "marca": prod.marca,
+            "descripcion": prod.descripcion,
+            "imagen_url": prod.imagen_url,
+            "unidad_medida": prod.unidad_medida,
+            "url_producto": prod.url_producto,
+            "categoria": prod.categoria,
+            "creado_en": prod.creado_en,
+            "actualizado_en": prod.actualizado_en,
+            "precio_actual_lista": latest_price.precio_lista if latest_price else None,
+            "precio_actual_oferta": latest_price.precio_oferta if latest_price else None,
+            "es_oferta_club": latest_price.es_oferta_club if latest_price else False,
+            "disponible": latest_price.disponible if latest_price else True,
+            "sucursal_nombre": latest_price.sucursal.nombre if latest_price and latest_price.sucursal else None
+        })
     return result
 
 @router.get("/categories", response_model=List[str])
