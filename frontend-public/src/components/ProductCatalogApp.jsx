@@ -2,12 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import Header from './Header';
 import ProductCard from './ProductCard';
 import ProductDetailModal from './ProductDetailModal';
-import { fetchSucursales, fetchAllProductos, fetchCategorias, fetchSuggestions } from '../lib/api';
-import { Filter, Search, Loader2, Sparkles, AlertCircle, ChevronDown, ShieldCheck } from 'lucide-react';
+import { fetchComercios, fetchSucursales, fetchAllProductos, fetchCategorias, fetchSuggestions } from '../lib/api';
+import { Filter, Search, Loader2, Sparkles, AlertCircle, ChevronDown, ShieldCheck, ShoppingCart } from 'lucide-react';
 
 const PAGE_INCREMENT = 60;
 
 export default function ProductCatalogApp() {
+  const [comercios, setComercios] = useState([]);
+  const [selectedComercio, setSelectedComercio] = useState(null);
   const [branches, setBranches] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -15,6 +17,8 @@ export default function ProductCatalogApp() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [onlyOffers, setOnlyOffers] = useState(false);
+  const [onlyBulto, setOnlyBulto] = useState(false);
+  const [ofertaSemanal, setOfertaSemanal] = useState(false);
   const [categorias, setCategorias] = useState([]);
   const [selectedCategoria, setSelectedCategoria] = useState('');
   const [visibleCount, setVisibleCount] = useState(PAGE_INCREMENT);
@@ -24,23 +28,45 @@ export default function ProductCatalogApp() {
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const searchSeqRef = useRef(0);
   const suggestionSeqRef = useRef(0);
+  const branchSeqRef = useRef(0);
   const searchBoxRef = useRef(null);
 
-  // Cargar sucursales iniciales
+  // Cargar comercios iniciales (default: La Anónima)
   useEffect(() => {
-    fetchSucursales()
+    fetchComercios()
       .then((data) => {
-        setBranches(data);
-        if (data.length > 0) {
-          // Seleccionar Trelew o la primera sucursal por defecto
-          const defaultBranch = data.find(b => b.nombre.toLowerCase().includes('trelew')) || data[0];
-          setSelectedBranch(defaultBranch);
-        }
+        const filtered = data.filter(c => c.slug !== 'diarco');
+        setComercios(filtered);
+        const def = filtered.find(c => c.slug === 'la-anonima') || filtered[0] || null;
+        setSelectedComercio(def);
       })
       .catch(console.error);
-
-    fetchCategorias().then(setCategorias).catch(console.error);
   }, []);
+
+  // Al cambiar de comercio, cargar sus sucursales + categorías y resetear filtros
+  useEffect(() => {
+    if (!selectedComercio) return;
+    const seq = ++branchSeqRef.current;
+    setSelectedBranch(null);
+    setBranches([]);
+    setProducts([]);
+    setSelectedCategoria('');
+    setSearchQuery('');
+    setDebouncedSearch('');
+    setOnlyBulto(false);
+    setOfertaSemanal(false);
+    setVisibleCount(PAGE_INCREMENT);
+    setLoading(true);
+
+    fetchSucursales(selectedComercio.id)
+      .then((data) => {
+        if (seq !== branchSeqRef.current) return;
+        setBranches(data);
+        setSelectedBranch(data[0] || null);
+      })
+      .catch(console.error);
+    fetchCategorias(selectedComercio.id).then(setCategorias).catch(console.error);
+  }, [selectedComercio]);
 
   // Debounce del buscador (300ms) para no disparar un request por tecla
   useEffect(() => {
@@ -61,7 +87,7 @@ export default function ProductCatalogApp() {
     const t = setTimeout(() => {
       const seq = ++suggestionSeqRef.current;
       setSuggestionsLoading(true);
-      fetchSuggestions(query, selectedBranch ? selectedBranch.id : undefined, 8)
+      fetchSuggestions(query, selectedBranch ? selectedBranch.id : undefined, selectedComercio ? selectedComercio.id : undefined, 8)
         .then((data) => {
           if (seq !== suggestionSeqRef.current) return;
           setSuggestions(data);
@@ -76,7 +102,7 @@ export default function ProductCatalogApp() {
         });
     }, 250);
     return () => clearTimeout(t);
-  }, [searchQuery, selectedBranch]);
+  }, [searchQuery, selectedBranch, selectedComercio]);
 
   // Cerrar dropdown al hacer clic fuera o presionar Escape
   useEffect(() => {
@@ -96,14 +122,17 @@ export default function ProductCatalogApp() {
     };
   }, []);
 
-  // Cargar productos al cambiar filtros o sucursal
+  // Cargar productos al cambiar comercio, sucursal o filtros
   useEffect(() => {
     const seq = ++searchSeqRef.current;
     setLoading(true);
     const params = {
       search: debouncedSearch || undefined,
       sucursal_id: selectedBranch ? selectedBranch.id : undefined,
-      categoria: selectedCategoria || undefined
+      comercio_id: selectedComercio ? selectedComercio.id : undefined,
+      categoria: selectedCategoria || undefined,
+      bulto_cerrado: onlyBulto || undefined,
+      oferta_semanal: ofertaSemanal || undefined,
     };
 
     fetchAllProductos(params)
@@ -123,7 +152,7 @@ export default function ProductCatalogApp() {
         console.error(err);
         setLoading(false);
       });
-  }, [selectedBranch, debouncedSearch, onlyOffers, selectedCategoria]);
+  }, [selectedComercio, selectedBranch, debouncedSearch, onlyOffers, onlyBulto, ofertaSemanal, selectedCategoria]);
 
   const selectSuggestion = (product) => {
     suggestionSeqRef.current++;
@@ -139,10 +168,15 @@ export default function ProductCatalogApp() {
     setDebouncedSearch(searchQuery);
   };
 
+  const comercioNombre = selectedComercio ? selectedComercio.nombre : 'todas las cadenas';
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Top Header React Island */}
       <Header
+        comercios={comercios}
+        selectedComercio={selectedComercio}
+        onSelectComercio={setSelectedComercio}
         selectedBranch={selectedBranch}
         branches={branches}
         onSelectBranch={setSelectedBranch}
@@ -150,23 +184,25 @@ export default function ProductCatalogApp() {
 
       {/* Hero / Filter Bar */}
       <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6">
-        {/* Banner Informativo de Sucursal */}
+        {/* Banner Informativo de Comercio/Sucursal */}
         <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-anonima-darkred rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="space-y-1 text-center md:text-left">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-bold text-red-200">
               <Sparkles className="w-3.5 h-3.5" />
-              Extracción por Sucursal en Tiempo Real
+              {selectedComercio ? `${selectedComercio.nombre} — ${selectedComercio.tipo}` : 'Extracción Multi-Mercado'}
             </span>
             <h2 className="text-2xl font-black tracking-tight">
-              Precios en {selectedBranch ? selectedBranch.nombre : 'Todas las Sucursales'}
+              Precios en {selectedComercio ? selectedComercio.nombre : 'todas las cadenas'}
+              {selectedBranch ? ` · ${selectedBranch.nombre}` : ''}
             </h2>
             <p className="text-xs text-slate-300 max-w-xl">
-              Comparativa de precios de lista y ofertas en Chubut y Patagonia. Monitoreo diario por ubicación geográfica. Hacé clic en un producto para ver sus detalles.
+              Comparativa de precios de lista y ofertas entre cadenas (La Anónima, Carrefour, Jumbo, Vea,
+              Mas Online, Diarco, Yaguar). Hacé clic en un producto para ver sus detalles.
             </p>
             {onlyOffers && (
               <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-red-300">
                 <ShieldCheck className="w-4 h-4" />
-                Las mismas ofertas están vigentes en todas las sucursales de Chubut y Patagonia.
+                Mostrando solo productos con oferta activa.
               </p>
             )}
           </div>
@@ -204,6 +240,30 @@ export default function ProductCatalogApp() {
             >
               🔥 Solo Ofertas
             </button>
+
+            <button
+              onClick={() => setOnlyBulto(!onlyBulto)}
+              className={`px-3 py-2 rounded-lg text-xs font-bold transition-all border ${
+                onlyBulto
+                  ? 'bg-amber-500 text-white border-amber-500 shadow'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              📦 Solo Bulto Cerrado
+            </button>
+
+            {selectedComercio?.slug === 'yaguar' && (
+              <button
+                onClick={() => setOfertaSemanal(!ofertaSemanal)}
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all border ${
+                  ofertaSemanal
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                🏷️ Oferta Semanal
+              </button>
+            )}
 
             <select
               value={selectedCategoria}
@@ -253,7 +313,7 @@ export default function ProductCatalogApp() {
               <div className="absolute z-30 mt-2 w-full bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
                 <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-anonima-red" />
-                  Sugerencias de Almacén
+                  Sugerencias {selectedComercio ? `de ${selectedComercio.nombre}` : ''}
                 </div>
                 <ul className="max-h-80 overflow-y-auto divide-y divide-slate-100">
                   {suggestions.map((p) => {
@@ -282,7 +342,7 @@ export default function ProductCatalogApp() {
                               {p.titulo}
                             </span>
                             <span className="block text-xs text-slate-500 truncate">
-                              {p.marca ? p.marca.toUpperCase() : 'La Anónima'}
+                              {p.marca ? p.marca.toUpperCase() : selectedComercio ? selectedComercio.nombre.toUpperCase() : ''}
                               {p.unidad_medida ? ` • ${p.unidad_medida}` : ''}
                             </span>
                           </span>
@@ -316,16 +376,43 @@ export default function ProductCatalogApp() {
             <Loader2 className="w-10 h-10 animate-spin text-anonima-red" />
             <span className="text-xs font-bold text-slate-500">Consultando catálogo de precios...</span>
           </div>
+        ) : products.length === 0 && onlyBulto && selectedComercio?.slug !== 'yaguar' ? (
+          <div className="bg-amber-50 rounded-2xl p-12 text-center border-2 border-amber-200 shadow-sm flex flex-col items-center gap-3 max-w-md mx-auto my-12">
+            <ShoppingCart className="w-12 h-12 text-amber-500" />
+            <h3 className="font-extrabold text-amber-900 text-lg">Precios por Bulto Cerrado</h3>
+            <p className="text-sm text-amber-700">
+              Los precios por bulto cerrado son exclusivos de comercios <strong>mayoristas</strong>.
+            </p>
+            <p className="text-xs text-amber-600">
+              Encontrá productos por bulto en <strong>Yaguar</strong> para ver precios mayoristas.
+            </p>
+            <button
+              onClick={() => {
+                const yaguar = comercios.find(c => c.slug === 'yaguar');
+                if (yaguar) {
+                  setSelectedComercio(yaguar);
+                  setOnlyBulto(true);
+                }
+              }}
+              className="mt-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold rounded-xl transition-colors shadow"
+            >
+              Ir a Yaguar
+            </button>
+          </div>
         ) : products.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-sm flex flex-col items-center gap-3 max-w-md mx-auto my-12">
             <AlertCircle className="w-12 h-12 text-slate-300" />
             <h3 className="font-extrabold text-slate-800 text-lg">No se encontraron productos</h3>
             <p className="text-xs text-slate-500">
-              {onlyOffers && debouncedSearch
-                ? `No hay ofertas que coincidan con «${debouncedSearch}» en la sucursal seleccionada. Probá desactivar el filtro "Solo Ofertas" para ver todos los resultados.`
-                : onlyOffers
-                  ? 'No hay productos en oferta que coincidan con los filtros aplicados. Probá desactivar el filtro "Solo Ofertas".'
-                  : 'No hay coincidencias para los filtros aplicados en la sucursal seleccionada. Prueba cambiando la sucursal o limpiando el buscador.'}
+              {!selectedComercio
+                ? 'Seleccioná un comercio en la barra superior para comenzar.'
+                : onlyOffers && debouncedSearch
+                  ? `No hay ofertas que coincidan con «${debouncedSearch}» en ${comercioNombre}. Probá desactivar el filtro "Solo Ofertas" para ver todos los resultados.`
+                  : onlyOffers
+                    ? `No hay productos en oferta que coincidan con los filtros en ${comercioNombre}. Probá desactivar el filtro "Solo Ofertas".`
+                    : debouncedSearch
+                      ? `No hay coincidencias para «${debouncedSearch}» en ${comercioNombre}. Probá limpiando el buscador o cambiando de sucursal.`
+                      : `Este comercio aún no tiene catálogo cargado. Lanzá el scraper de ${comercioNombre} desde el Panel de Administración (http://localhost:3000) para poblar sus precios.`}
             </p>
           </div>
         ) : (
@@ -341,7 +428,7 @@ export default function ProductCatalogApp() {
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 lg:gap-8">
               {products.slice(0, visibleCount).map((product) => (
                 <ProductCard
-                  key={product.id}
+                  key={`${product.comercio_id || ''}-${product.id}`}
                   product={product}
                   onSelect={setSelectedProduct}
                 />

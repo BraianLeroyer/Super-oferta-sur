@@ -1,4 +1,4 @@
-from sqlalchemy import Column, BigInteger, Integer, Numeric, Boolean, DateTime, ForeignKey, func, Index
+from sqlalchemy import Column, BigInteger, Integer, Numeric, Boolean, String, DateTime, ForeignKey, func, Index
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -13,6 +13,8 @@ class PrecioHistorial(Base):
     sucursal_id = Column(Integer, ForeignKey("sucursales.id", ondelete="CASCADE"), nullable=False)
     precio_lista = Column(Numeric(12, 2), nullable=False)
     precio_oferta = Column(Numeric(12, 2), nullable=True)
+    precio_bulto = Column(Numeric(12, 2), nullable=True)
+    descripcion_bulto = Column(String(100), nullable=True)
     es_oferta_club = Column(Boolean, default=False)
     disponible = Column(Boolean, default=True)
     fecha_captura = Column(DateTime, server_default=func.now(), index=True)

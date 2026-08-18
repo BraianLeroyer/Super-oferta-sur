@@ -2,8 +2,21 @@ export const API_BASE_URL = typeof window !== 'undefined'
   ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1')
   : (process.env.INTERNAL_API_URL || 'http://backend:8000/api/v1');
 
+export interface Comercio {
+  id: number;
+  nombre: string;
+  slug: string;
+  tipo: string;
+  base_url?: string | null;
+  scraping_modo?: string;
+  color?: string | null;
+  habilitado: boolean;
+  creado_en: string;
+}
+
 export interface ScraperJob {
   id: string;
+  comercio_id: number | null;
   sucursal_id: number | null;
   estado: string;
   total_scrapeados: number;
@@ -11,19 +24,28 @@ export interface ScraperJob {
   mensaje_error: string | null;
   iniciado_en: string;
   finalizado_en: string | null;
+  comercio?: {
+    id: number;
+    nombre: string;
+    slug: string;
+    tipo: string;
+  };
   sucursal?: {
     id: number;
     codigo_sucursal: string;
     nombre: string;
     provincia: string;
+    tipo_sucursal?: string;
   };
 }
 
 export interface Sucursal {
   id: number;
+  comercio_id?: number | null;
   codigo_sucursal: string;
   nombre: string;
   provincia: string;
+  tipo_sucursal?: string;
   creado_en: string;
 }
 
@@ -37,9 +59,14 @@ export interface Producto {
   unidad_medida: string | null;
   url_producto?: string | null;
   categoria?: string | null;
+  comercio_id?: number | null;
+  comercio_nombre?: string | null;
   precio_actual_lista: number | null;
   precio_actual_oferta: number | null;
+  precio_bulto: number | null;
+  descripcion_bulto: string | null;
   sucursal_nombre?: string;
+  tipo_sucursal?: string;
 }
 
 export async function fetchJobs(): Promise<ScraperJob[]> {
@@ -53,9 +80,23 @@ export async function fetchJobs(): Promise<ScraperJob[]> {
   }
 }
 
-export async function fetchSucursales(): Promise<Sucursal[]> {
+export async function fetchComercios(): Promise<Comercio[]> {
   try {
-    const res = await fetch(`${API_BASE_URL}/sucursales`, { cache: 'no-store' });
+    const res = await fetch(`${API_BASE_URL}/comercios`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (err) {
+    console.error('Error cargando comercios:', err);
+    return [];
+  }
+}
+
+export async function fetchSucursales(comercio_id?: number): Promise<Sucursal[]> {
+  try {
+    const query = new URLSearchParams();
+    if (comercio_id) query.set('comercio_id', comercio_id.toString());
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const res = await fetch(`${API_BASE_URL}/sucursales${suffix}`, { cache: 'no-store' });
     if (!res.ok) return [];
     return await res.json();
   } catch (err) {
@@ -64,12 +105,16 @@ export async function fetchSucursales(): Promise<Sucursal[]> {
   }
 }
 
-export async function triggerScraper(sucursal: string, limite_productos: number = 50): Promise<ScraperJob | null> {
+export async function triggerScraper(
+  comercio: string,
+  sucursal: string,
+  limite_productos: number = 50
+): Promise<ScraperJob | null> {
   try {
     const res = await fetch(`${API_BASE_URL}/scraper/trigger`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sucursal, limite_productos })
+      body: JSON.stringify({ comercio, sucursal, limite_productos })
     });
     if (!res.ok) return null;
     return await res.json();
@@ -79,13 +124,15 @@ export async function triggerScraper(sucursal: string, limite_productos: number 
   }
 }
 
-export async function fetchProductosAdmin(): Promise<Producto[]> {
+export async function fetchProductosAdmin(comercio_id?: number): Promise<Producto[]> {
   try {
     const all: Producto[] = [];
     let page = 1;
     const pageSize = 500;
     while (true) {
-      const res = await fetch(`${API_BASE_URL}/products?page=${page}&limit=${pageSize}`, { cache: 'no-store' });
+      const query = new URLSearchParams({ page: page.toString(), limit: pageSize.toString() });
+      if (comercio_id) query.set('comercio_id', comercio_id.toString());
+      const res = await fetch(`${API_BASE_URL}/products?${query.toString()}`, { cache: 'no-store' });
       if (!res.ok) break;
       const batch = await res.json();
       all.push(...batch);

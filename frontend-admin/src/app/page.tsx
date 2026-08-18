@@ -1,28 +1,35 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { fetchJobs, fetchSucursales, fetchProductosAdmin, triggerScraper, ScraperJob, Sucursal, Producto } from '@/lib/api';
-import { MapPin, Play, Activity, Database, CheckCircle2, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
+import { fetchJobs, fetchSucursales, fetchProductosAdmin, fetchComercios, triggerScraper, ScraperJob, Sucursal, Producto, Comercio } from '@/lib/api';
+import { MapPin, Play, Activity, Database, Store, CheckCircle2, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export default function DashboardPage() {
+  const [comercios, setComercios] = useState<Comercio[]>([]);
+  const [selectedComercioId, setSelectedComercioId] = useState<number | null>(null);
   const [jobs, setJobs] = useState<ScraperJob[]>([]);
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedSucursal, setSelectedSucursal] = useState('Trelew');
+  const [selectedSucursal, setSelectedSucursal] = useState('');
   const [triggering, setTriggering] = useState(false);
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
-    const [j, s, p] = await Promise.all([
+    const [c, j, s, p] = await Promise.all([
+      fetchComercios(),
       fetchJobs(),
-      fetchSucursales(),
-      fetchProductosAdmin()
+      fetchSucursales(selectedComercioId ?? undefined),
+      fetchProductosAdmin(selectedComercioId ?? undefined)
     ]);
+    setComercios(c);
     setJobs(j);
     setSucursales(s);
     setProductos(p);
+    if (s.length > 0 && (!selectedSucursal || !s.some(suc => suc.nombre === selectedSucursal))) {
+      setSelectedSucursal(s[0].nombre);
+    }
     setLoading(false);
   };
 
@@ -30,19 +37,31 @@ export default function DashboardPage() {
     loadData();
     const interval = setInterval(loadData, 5000);
     return () => clearInterval(interval);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedComercioId]);
+
+  const handleComercioChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedComercioId(e.target.value ? Number(e.target.value) : null);
+    setSelectedSucursal('');
+  };
+
+  const selectedComercio = comercios.find(c => c.id === selectedComercioId) || null;
 
   const handleTrigger = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedComercio || !selectedSucursal) {
+      setTriggerMessage('❌ Seleccioná un comercio y una sucursal');
+      return;
+    }
     setTriggering(true);
     setTriggerMessage(null);
-    const res = await triggerScraper(selectedSucursal, 50);
+    const res = await triggerScraper(selectedComercio.slug, selectedSucursal, 50);
     setTriggering(false);
     if (res) {
-      setTriggerMessage(`✅ Tarea de raspado enviada para ${selectedSucursal} (ID: ${res.id.slice(0, 8)})`);
+      setTriggerMessage(`✅ Tarea de raspado enviada para ${selectedComercio.nombre} / ${selectedSucursal} (ID: ${res.id.slice(0, 8)})`);
       loadData();
     } else {
-      setTriggerMessage(`❌ Error al iniciar la tarea de raspado`);
+      setTriggerMessage('❌ Error al iniciar la tarea de raspado');
     }
   };
 
@@ -56,7 +75,7 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
         <div>
           <h1 className="text-2xl font-black text-white tracking-tight">Dashboard General Scraper</h1>
-          <p className="text-xs text-slate-400">Sistema de Extracción Espacial por Sucursales - La Anónima</p>
+          <p className="text-xs text-slate-400">Sistema de Extracción Multi-Mercado por Comercio y Sucursal</p>
         </div>
         <button
           onClick={loadData}
@@ -72,24 +91,24 @@ export default function DashboardPage() {
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex items-center justify-between">
           <div>
             <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1">
-              Sucursales Activas
+              Comercios Activos
             </span>
-            <span className="text-3xl font-black text-white">{sucursales.length}</span>
+            <span className="text-3xl font-black text-white">{comercios.length}</span>
           </div>
           <div className="p-3 bg-red-950/60 text-anonima-red rounded-xl border border-red-900/40">
-            <MapPin className="w-6 h-6" />
+            <Store className="w-6 h-6" />
           </div>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex items-center justify-between">
           <div>
             <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1">
-              Productos en Base
+              Sucursales Activas
             </span>
-            <span className="text-3xl font-black text-white">{productos.length}</span>
+            <span className="text-3xl font-black text-white">{sucursales.length}</span>
           </div>
           <div className="p-3 bg-blue-950/60 text-blue-400 rounded-xl border border-blue-900/40">
-            <Database className="w-6 h-6" />
+            <MapPin className="w-6 h-6" />
           </div>
         </div>
 
@@ -125,18 +144,33 @@ export default function DashboardPage() {
             <span className="text-[10px] font-extrabold uppercase tracking-widest text-anonima-red bg-red-950/80 px-2.5 py-1 rounded-full border border-red-800/40 inline-block">
               Acción Manual Scraper
             </span>
-            <h2 className="text-lg font-black text-white">Lanzar Raspado por Sucursal (Spatial Extraction)</h2>
+            <h2 className="text-lg font-black text-white">Lanzar Raspado por Comercio y Sucursal</h2>
             <p className="text-xs text-slate-400 max-w-xl">
-              Selecciona una ubicación (Trelew, Rawson, Puerto Madryn, Comodoro, Esquel) para simular la sesión del supermercado y extraer precios actualizados.
+              Selecciona un comercio (La Anónima, Carrefour, Jumbo, Vea, Mas Online, Diarco, Yaguar) y
+              una sucursal para extraer precios actualizados del catálogo online.
             </p>
           </div>
 
           <form onSubmit={handleTrigger} className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
             <select
+              value={selectedComercioId ?? ''}
+              onChange={handleComercioChange}
+              className="w-full sm:w-52 bg-slate-950 text-white font-bold text-xs border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-anonima-red"
+            >
+              <option value="">Todos los comercios</option>
+              {comercios.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre} ({c.tipo})
+                </option>
+              ))}
+            </select>
+
+            <select
               value={selectedSucursal}
               onChange={(e) => setSelectedSucursal(e.target.value)}
               className="w-full sm:w-48 bg-slate-950 text-white font-bold text-xs border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-anonima-red"
             >
+              {sucursales.length === 0 && <option value="">Sin sucursales</option>}
               {sucursales.map((s) => (
                 <option key={s.id} value={s.nombre}>
                   Sucursal {s.nombre} ({s.codigo_sucursal})
@@ -176,6 +210,7 @@ export default function DashboardPage() {
             <thead className="bg-slate-950 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-800">
               <tr>
                 <th className="py-3 px-4">Job ID</th>
+                <th className="py-3 px-4">Comercio</th>
                 <th className="py-3 px-4">Sucursal</th>
                 <th className="py-3 px-4">Estado</th>
                 <th className="py-3 px-4">Extraídos</th>
@@ -187,6 +222,9 @@ export default function DashboardPage() {
               {jobs.slice(0, 8).map((job) => (
                 <tr key={job.id} className="hover:bg-slate-800/50 transition-colors">
                   <td className="py-3 px-4 font-mono text-slate-400">{job.id.slice(0, 8)}...</td>
+                  <td className="py-3 px-4 font-bold text-white">
+                    {job.comercio?.nombre || 'La Anónima'}
+                  </td>
                   <td className="py-3 px-4 font-bold text-white">
                     {job.sucursal?.nombre || 'Trelew'}
                   </td>

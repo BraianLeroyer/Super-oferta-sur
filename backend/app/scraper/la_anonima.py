@@ -3,6 +3,7 @@ import random
 import re
 from typing import List, Dict, Any
 import httpx
+
 from app.scraper.anti_blocking import get_anti_blocking_headers, random_delay_async
 from app.scraper.sucursal_session import get_sucursal_session_config
 from app.scraper.catalogo import PRODUCTOS_CATALOGO_BASE
@@ -68,10 +69,14 @@ CATEGORIAS_REALES = [
     "https://www.laanonima.com.ar/mascotas/n2_321/",
 ]
 
+
 class LaAnonimaScraper:
+    """Scraper de La Anónima (scraping en vivo + fallback del catálogo base)."""
+
     BASE_URL = "https://www.laanonima.com.ar"
 
-    def __init__(self, sucursal_query: str):
+    def __init__(self, sucursal_query: str, comercio: Dict[str, Any] = None):
+        self.comercio = comercio or {"nombre": "La Anónima"}
         self.sucursal_config = get_sucursal_session_config(sucursal_query)
         self.headers = get_anti_blocking_headers()
         self.cookies = self.sucursal_config.get("cookies", {})
@@ -153,7 +158,9 @@ class LaAnonimaScraper:
                 "precio_lista": round(precio_lista, 2),
                 "precio_oferta": round(precio_oferta, 2) if precio_oferta else None,
                 "es_oferta_club": bool(re.search(r"promocion\d+-off", chunk)),
-                "disponible": True
+                "disponible": True,
+                "precio_bulto": None,
+                "descripcion_bulto": None,
             })
         return products
 
@@ -171,7 +178,7 @@ class LaAnonimaScraper:
                 cards = self._parse_cards(response.text)
                 logger.info(f"Extracción en vivo de {cat_url}: {len(cards)} productos.")
                 for card in cards:
-                    if len(products) >= limit:
+                    if limit and len(products) >= limit:
                         break
                     if card["sku"] in seen_skus:
                         continue
@@ -180,7 +187,7 @@ class LaAnonimaScraper:
             except Exception as e:
                 logger.warning(f"Error en scraping en vivo de {cat_url}: {e}")
                 continue
-            if len(products) >= limit:
+            if limit and len(products) >= limit:
                 break
         return products
 
@@ -202,11 +209,11 @@ class LaAnonimaScraper:
         except Exception as e:
             logger.warning(f"Scraping en vivo bloqueado o con error ({e}). Activando motor de resolución por sucursal.")
 
-        if len(extracted_products) < limit:
+        if limit and len(extracted_products) < limit:
             logger.info(f"Se obtuvieron {len(extracted_products)} en vivo; completando desde catálogo base real.")
             live_skus = {p["sku"] for p in extracted_products}
             for prod in PRODUCTOS_CATALOGO_BASE:
-                if len(extracted_products) >= limit:
+                if limit and len(extracted_products) >= limit:
                     break
                 if prod["sku"] in live_skus:
                     continue
@@ -228,8 +235,10 @@ class LaAnonimaScraper:
                     "precio_lista": base_p,
                     "precio_oferta": precio_oferta,
                     "es_oferta_club": prod.get("es_club", False),
-                    "disponible": True
+                    "disponible": True,
+                    "precio_bulto": None,
+                    "descripcion_bulto": None,
                 })
 
         logger.info(f"Extracción finalizada para {self.sucursal_config['nombre']}: {len(extracted_products)} productos procesados.")
-        return extracted_products[:limit]
+        return extracted_products[:limit] if limit else extracted_products

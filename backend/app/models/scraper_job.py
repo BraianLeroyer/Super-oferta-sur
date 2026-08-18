@@ -8,6 +8,7 @@ class ScraperJob(Base):
     __tablename__ = "scraper_jobs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    comercio_id = Column(Integer, ForeignKey("comercios.id"), nullable=True)
     sucursal_id = Column(Integer, ForeignKey("sucursales.id"), nullable=True)
     estado = Column(String(50), nullable=False, default="PENDING") # PENDING, RUNNING, FINISHED, FAILED
     total_scrapeados = Column(Integer, default=0)
@@ -16,4 +17,5 @@ class ScraperJob(Base):
     iniciado_en = Column(DateTime, server_default=func.now())
     finalizado_en = Column(DateTime, nullable=True)
 
+    comercio = relationship("Comercio", back_populates="jobs")
     sucursal = relationship("Sucursal", back_populates="jobs")

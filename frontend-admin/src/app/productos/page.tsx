@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { fetchProductosAdmin, Producto } from '@/lib/api';
-import { Database, Search, RefreshCw, Tag, ChevronLeft, ChevronRight } from 'lucide-react';
+import { fetchProductosAdmin, fetchComercios, Producto, Comercio } from '@/lib/api';
+import { Database, Search, RefreshCw, Tag, ChevronLeft, ChevronRight, Store } from 'lucide-react';
 
 const PAGE_SIZE = 50;
 
 export default function ProductosPage() {
+  const [comercios, setComercios] = useState<Comercio[]>([]);
+  const [selectedComercioId, setSelectedComercioId] = useState<number | null>(null);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterQuery, setFilterQuery] = useState('');
@@ -14,7 +16,13 @@ export default function ProductosPage() {
 
   const loadProductos = async () => {
     setLoading(true);
-    const data = await fetchProductosAdmin();
+    const c = await fetchComercios();
+    setComercios(c);
+    if (selectedComercioId === null && c.length > 0) {
+      const def = c.find(item => item.slug === 'la-anonima') || c[0];
+      setSelectedComercioId(def.id);
+    }
+    const data = await fetchProductosAdmin(selectedComercioId ?? undefined);
     setProductos(data);
     setPage(0);
     setLoading(false);
@@ -22,7 +30,13 @@ export default function ProductosPage() {
 
   useEffect(() => {
     loadProductos();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedComercioId]);
+
+  const handleComercioChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedComercioId(e.target.value ? Number(e.target.value) : null);
+    setFilterQuery('');
+  };
 
   const filtered = productos.filter(p =>
     p.titulo.toLowerCase().includes(filterQuery.toLowerCase()) ||
@@ -41,10 +55,24 @@ export default function ProductosPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
         <div>
           <h1 className="text-2xl font-black text-white tracking-tight">Catálogo de Productos en DB</h1>
-          <p className="text-xs text-slate-400">{productos.length} productos reales por sucursal, clasificados por SKU, categoría y sucursal</p>
+          <p className="text-xs text-slate-400">{productos.length} productos del catálogo actual, clasificados por comercio, SKU, categoría y sucursal</p>
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-2">
+            <Store className="w-4 h-4 text-anonima-red" />
+            <select
+              value={selectedComercioId ?? ''}
+              onChange={handleComercioChange}
+              className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-anonima-red"
+            >
+              <option value="">Todos los comercios</option>
+              {comercios.map((c) => (
+                <option key={c.id} value={c.id}>{c.nombre} ({c.tipo})</option>
+              ))}
+            </select>
+          </div>
+
           <div className="relative flex-1 sm:w-64">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
             <input
@@ -73,13 +101,16 @@ export default function ProductosPage() {
               <th className="py-3.5 px-4">SKU</th>
               <th className="py-3.5 px-4">Imagen</th>
               <th className="py-3.5 px-4">Producto</th>
+              <th className="py-3.5 px-4">Comercio</th>
               <th className="py-3.5 px-4">Marca</th>
               <th className="py-3.5 px-4">Categoría</th>
               <th className="py-3.5 px-4">Descripción</th>
               <th className="py-3.5 px-4">Unidad</th>
               <th className="py-3.5 px-4">Última Sucursal</th>
+              <th className="py-3.5 px-4">Tipo</th>
               <th className="py-3.5 px-4">Precio Lista</th>
               <th className="py-3.5 px-4">Precio Oferta</th>
+              <th className="py-3.5 px-4">Bulto</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800 text-slate-300 font-medium">
@@ -94,13 +125,23 @@ export default function ProductosPage() {
                   />
                 </td>
                 <td className="py-3.5 px-4 font-bold text-white max-w-xs">{p.titulo}</td>
-                <td className="py-3.5 px-4 text-slate-400">{p.marca || 'La Anónima'}</td>
+                <td className="py-3.5 px-4">
+                  <span className="px-2 py-0.5 bg-red-950 text-anonima-red border border-red-900/40 rounded font-semibold text-[10px]">
+                    {p.comercio_nombre || 'La Anónima'}
+                  </span>
+                </td>
+                <td className="py-3.5 px-4 text-slate-400">{p.marca || '-'}</td>
                 <td className="py-3.5 px-4 text-slate-400 text-[11px] max-w-[200px]">{p.categoria || '-'}</td>
                 <td className="py-3.5 px-4 text-slate-400 text-[11px] max-w-xs truncate">{p.descripcion || '-'}</td>
                 <td className="py-3.5 px-4 text-slate-400">{p.unidad_medida || '-'}</td>
                 <td className="py-3.5 px-4">
                   <span className="px-2 py-0.5 bg-red-950 text-anonima-red border border-red-900/40 rounded font-semibold text-[10px]">
                     {p.sucursal_nombre || 'Trelew'}
+                  </span>
+                </td>
+                <td className="py-3.5 px-4">
+                  <span className={`px-2 py-0.5 rounded font-semibold text-[10px] ${p.tipo_sucursal === 'mayorista' ? 'bg-amber-950 text-amber-400 border border-amber-900/40' : 'bg-emerald-950 text-emerald-400 border border-emerald-900/40'}`}>
+                    {p.tipo_sucursal === 'mayorista' ? 'Mayorista' : 'Supermercado'}
                   </span>
                 </td>
                 <td className="py-3.5 px-4 font-bold text-white">
@@ -110,6 +151,16 @@ export default function ProductosPage() {
                   {p.precio_actual_oferta ? (
                     <span className="font-bold text-emerald-400">
                       ${Number(p.precio_actual_oferta).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                    </span>
+                  ) : (
+                    <span className="text-slate-500">-</span>
+                  )}
+                </td>
+                <td className="py-3.5 px-4">
+                  {p.precio_bulto ? (
+                    <span className="font-bold text-amber-400">
+                      ${Number(p.precio_bulto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                      {p.descripcion_bulto && <span className="block text-[10px] text-amber-600">{p.descripcion_bulto}</span>}
                     </span>
                   ) : (
                     <span className="text-slate-500">-</span>

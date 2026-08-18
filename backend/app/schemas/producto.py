@@ -13,6 +13,7 @@ class ProductoBase(BaseModel):
     unidad_medida: Optional[str] = None
     url_producto: Optional[str] = None
     categoria: Optional[str] = None
+    comercio_id: Optional[int] = None
 
 class ProductoCreate(ProductoBase):
     pass
@@ -24,9 +25,14 @@ class ProductoOut(ProductoBase):
     # Precios actuales / último precio en la sucursal seleccionada
     precio_actual_lista: Optional[Decimal] = None
     precio_actual_oferta: Optional[Decimal] = None
+    precio_bulto: Optional[Decimal] = None
+    descripcion_bulto: Optional[str] = None
     es_oferta_club: Optional[bool] = False
     disponible: Optional[bool] = True
     sucursal_nombre: Optional[str] = None
+    tipo_sucursal: Optional[str] = None
+    comercio_nombre: Optional[str] = None
+    es_oferta_semanal: Optional[bool] = False
 
     model_config = ConfigDict(from_attributes=True)
 

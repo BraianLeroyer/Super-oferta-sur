@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
-import { Tag, TrendingDown, CheckCircle2, XCircle, X, ExternalLink, MapPin } from 'lucide-react';
+import { Tag, TrendingDown, CheckCircle2, XCircle, X, ExternalLink, MapPin, Boxes } from 'lucide-react';
 
 export default function ProductDetailModal({ product, onClose }) {
   const hasOffer = Boolean(product.precio_actual_oferta);
+  const hasBulto = Boolean(product.precio_bulto);
   const priceList = Number(product.precio_actual_lista || 0);
   const priceOffer = Number(product.precio_actual_oferta || 0);
+  const priceBulto = Number(product.precio_bulto || 0);
   const productUrl = product.url_producto || null;
 
   const discountPercent = hasOffer && priceList > 0
@@ -139,6 +141,19 @@ export default function ProductDetailModal({ product, onClose }) {
                 )}
               </div>
             </div>
+
+            {/* Bulto cerrado (mayoristas) */}
+            {hasBulto && (
+              <div className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+                <span className="flex items-center gap-2 text-sm font-bold text-amber-800">
+                  <Boxes className="w-4 h-4 text-amber-600" />
+                  {product.descripcion_bulto || 'Bulto'}
+                </span>
+                <span className="text-xl font-extrabold text-slate-900">
+                  ${priceBulto.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
 
             {/* Link oficial */}
             {productUrl ? (
