@@ -1,7 +1,9 @@
-export const API_BASE_URL =
+const rawApiUrl =
   (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.PUBLIC_API_URL || import.meta.env.NEXT_PUBLIC_API_URL)) ||
   (typeof process !== 'undefined' && process.env && (process.env.PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.INTERNAL_API_URL)) ||
   'http://localhost:8000/api/v1';
+
+export const API_BASE_URL = rawApiUrl.trim().replace(/\/+$/, '');
 
 export interface Comercio {
   id: number;
