@@ -141,6 +141,13 @@ def run_scraper_job_task(job_id_str: str, comercio_query: str, sucursal_query: s
 
         extracted_items = _run_extraction_coro(scraper, limit, brands_to_search, precio_maximo)
 
+        # Refrescar sesión para evitar desconexiones SSL por inactividad durante la extracción de red
+        db.close()
+        db = SessionLocal()
+        job = db.query(ScraperJob).filter(ScraperJob.id == job_id).first()
+        comercio = db.query(Comercio).filter(Comercio.id == job.comercio_id).first()
+        sucursal = db.query(Sucursal).filter(Sucursal.id == job.sucursal_id).first()
+
         total_scraped = 0
         total_errors = 0
         commit_every = 200

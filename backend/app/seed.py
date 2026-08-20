@@ -50,43 +50,62 @@ def seed_database():
                     logger.info(f"Sucursal creada: {s['nombre']} ({s['codigo']})")
         db.commit()
 
-        # 2. Ejecutar raspado inicial para popular la DB con productos y precios.
-        #    La Anónima siembra el catálogo COMPLETO (16.165). Las demás cadenas
-        #    también se siembran con su catálogo completo (limit=None) en el primer boot.
+        # Extraer lista de sucursales para no mantener una sesión abierta durante las descargas de red
+        targets = []
         for comercio in db.query(Comercio).order_by(Comercio.id).all():
-            seed_limit = len(PRODUCTOS_CATALOGO_BASE) if comercio.slug == "la-anonima" else None
             for suc in comercio.sucursales:
-                # Si la sucursal ya fue raspada con éxito (job FINISHED) no se
-                # vuelve a scrapear en cada boot. Diarco, p.ej., termina con 0
-                # productos (oculta precios a invitados) y quedaría repitiéndose.
-                ya_raspada = db.query(ScraperJob).filter(
-                    ScraperJob.sucursal_id == suc.id,
+                targets.append({
+                    "comercio_id": comercio.id,
+                    "comercio_slug": comercio.slug,
+                    "comercio_nombre": comercio.nombre,
+                    "sucursal_id": suc.id,
+                    "sucursal_nombre": suc.nombre,
+                    "seed_limit": len(PRODUCTOS_CATALOGO_BASE) if comercio.slug == "la-anonima" else None
+                })
+        db.close()
+
+        # 2. Ejecutar raspado inicial con sesiones independientes por sucursal
+        for t in targets:
+            job_id = None
+            db_job: Session = SessionLocal()
+            try:
+                ya_raspada = db_job.query(ScraperJob).filter(
+                    ScraperJob.sucursal_id == t["sucursal_id"],
                     ScraperJob.estado == "FINISHED",
                 ).first()
                 if ya_raspada:
                     continue
-                precios_count = db.query(PrecioHistorial).filter(PrecioHistorial.sucursal_id == suc.id).count()
+
+                precios_count = db_job.query(PrecioHistorial).filter(
+                    PrecioHistorial.sucursal_id == t["sucursal_id"]
+                ).count()
+
                 if precios_count == 0:
-                    logger.info(f"Poblando datos de productos para {comercio.nombre} / {suc.nombre}...")
+                    logger.info(f"Poblando datos para {t['comercio_nombre']} / {t['sucursal_nombre']}...")
                     job_id = uuid.uuid4()
                     job = ScraperJob(
                         id=job_id,
-                        comercio_id=comercio.id,
-                        sucursal_id=suc.id,
+                        comercio_id=t["comercio_id"],
+                        sucursal_id=t["sucursal_id"],
                         estado="PENDING",
                         total_scrapeados=0,
                         total_errores=0,
                     )
-                    db.add(job)
-                    db.commit()
-                    run_scraper_job_task(str(job_id), comercio.slug, suc.nombre, limit=seed_limit)
+                    db_job.add(job)
+                    db_job.commit()
+            finally:
+                db_job.close()
+
+            # Ejecutar la tarea de scraping fuera de la sesión de base de datos
+            if job_id:
+                try:
+                    run_scraper_job_task(str(job_id), t["comercio_slug"], t["sucursal_nombre"], limit=t["seed_limit"])
+                except Exception as e:
+                    logger.error(f"Error ejecutando scraper para {t['sucursal_nombre']}: {e}")
 
         logger.info("¡Seeding completado con éxito!")
     except Exception as e:
         logger.error(f"Error durante seeding: {e}")
-        db.rollback()
-    finally:
-        db.close()
 
 
 if __name__ == "__main__":
