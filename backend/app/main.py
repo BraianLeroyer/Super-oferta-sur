@@ -20,13 +20,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import threading
+
 @app.on_event("startup")
 def startup_db_and_seed():
     Base.metadata.create_all(bind=engine)
-    try:
-        seed_database()
-    except Exception as e:
-        print(f"Advertencia durante seeding en startup: {e}")
+    
+    # Ejecutar el seeding en segundo plano para que FastAPI levante en 1 segundo
+    # y Render complete el deploy inmediatamente sin dar 'Timed Out'
+    def bg_seed():
+        try:
+            seed_database()
+        except Exception as e:
+            print(f"Advertencia durante seeding en segundo plano: {e}")
+
+    thread = threading.Thread(target=bg_seed, daemon=True)
+    thread.start()
 
 @app.get("/")
 def root():
