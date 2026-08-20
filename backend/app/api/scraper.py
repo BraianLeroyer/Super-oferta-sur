@@ -78,11 +78,13 @@ def trigger_scraper(
     # limite_productos=null/0 → catálogo completo del comercio (None).
     limite = payload.limite_productos if payload.limite_productos is not None and payload.limite_productos > 0 else None
 
+    precio_maximo = payload.precio_maximo
+
     # Intentar enviar la tarea a Celery. Si Celery/Redis no estuviera listo, se ejecuta via BackgroundTasks de FastAPI
     try:
-        run_scraper_job_task.delay(str(job_id), comercio.slug, sucursal.nombre, limite)
+        run_scraper_job_task.delay(str(job_id), comercio.slug, sucursal.nombre, limite, precio_maximo)
     except Exception:
-        background_tasks.add_task(run_scraper_job_task, str(job_id), comercio.slug, sucursal.nombre, limite)
+        background_tasks.add_task(run_scraper_job_task, str(job_id), comercio.slug, sucursal.nombre, limite, precio_maximo)
 
     return job
 

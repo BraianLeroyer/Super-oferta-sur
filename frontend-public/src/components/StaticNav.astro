@@ -1,0 +1,74 @@
+---
+// src/components/StaticNav.astro
+interface Props {
+  currentPage?: 'catalogo' | 'sucursales' | 'nosotros' | 'privacidad' | 'terminos' | '';
+}
+const { currentPage = '' } = Astro.props;
+---
+
+<header class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-xs transition-all">
+  {/* Top Red Bar */}
+  <div class="bg-gradient-to-r from-anonima-red to-anonima-darkred text-white py-1.5 px-4 text-xs font-semibold flex justify-between items-center">
+    <div class="flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+      <span class="hidden sm:inline">Monitor de Precios y Ofertas de la Patagonia · Chubut</span>
+      <span class="sm:hidden">Ofertas Sur Patagonia</span>
+    </div>
+    <div class="flex items-center gap-2 text-[11px] text-red-100 font-medium">
+      <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+      <span>Plataforma Pública</span>
+    </div>
+  </div>
+
+  {/* Main Nav Container */}
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
+    
+    {/* Logo */}
+    <a href="/" class="flex items-center gap-2.5 group hover:opacity-95 transition-opacity">
+      <div class="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-anonima-red to-anonima-darkred rounded-2xl flex items-center justify-center text-white font-black text-base sm:text-xl shadow-md shadow-red-900/20 group-hover:scale-105 transition-transform">
+        OS
+      </div>
+      <div>
+        <span class="text-base sm:text-xl font-black text-slate-900 tracking-tight leading-none">
+          Ofertas <span class="text-anonima-red">Sur</span>
+        </span>
+        <p class="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wider">Patagonia Argentina</p>
+      </div>
+    </a>
+
+    {/* Frosted Blur Nav Pills */}
+    <nav class="inline-flex items-center gap-1 bg-slate-100/80 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200/70 shadow-inner">
+      <a
+        href="/"
+        class={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+          currentPage === 'catalogo'
+            ? 'bg-white text-anonima-red font-black shadow-xs border border-slate-200/60'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+        }`}
+      >
+        <span>🛒 Catálogo</span>
+      </a>
+      <a
+        href="/sucursales"
+        class={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+          currentPage === 'sucursales'
+            ? 'bg-white text-anonima-red font-black shadow-xs border border-slate-200/60'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+        }`}
+      >
+        <span>📍 Sucursales</span>
+      </a>
+      <a
+        href="/sobre-nosotros"
+        class={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+          currentPage === 'nosotros'
+            ? 'bg-white text-anonima-red font-black shadow-xs border border-slate-200/60'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+        }`}
+      >
+        <span>💡 Sobre Nosotros</span>
+      </a>
+    </nav>
+
+  </div>
+</header>

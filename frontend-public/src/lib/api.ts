@@ -69,6 +69,42 @@ export interface ComercioComparacion {
   productos: Producto[];
 }
 
+export interface ComparacionItem {
+  producto_id: number;
+  sku: string;
+  titulo: string;
+  marca: string | null;
+  imagen_url: string | null;
+  unidad_medida: string | null;
+  precio_lista: number | null;
+  precio_oferta: number | null;
+  disponible: boolean;
+}
+
+export interface ComparacionOriginal {
+  producto_id: number;
+  titulo: string;
+  marca: string | null;
+  imagen_url: string | null;
+  unidad_medida: string | null;
+  comercio_nombre: string;
+  precio_lista: number | null;
+  precio_oferta: number | null;
+}
+
+export interface ComparacionComercio {
+  comercio_nombre: string;
+  comercio_slug: string;
+  comercio_color: string | null;
+  mejor_precio: number;
+  productos: ComparacionItem[];
+}
+
+export interface ComparacionResponse {
+  producto_original: ComparacionOriginal;
+  comercios: ComparacionComercio[];
+}
+
 export async function fetchComercios(): Promise<Comercio[]> {
   try {
     const res = await fetch(`${API_BASE_URL}/comercios`);
@@ -209,5 +245,16 @@ export async function fetchComparar(
   } catch (err) {
     console.error('Error comparando precios:', err);
     return [];
+  }
+}
+
+export async function fetchCompararPorProducto(productId: number): Promise<ComparacionResponse | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/products/${productId}/compare-prices`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error('Error comparando precios del producto:', err);
+    return null;
   }
 }

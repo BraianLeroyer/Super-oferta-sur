@@ -7,6 +7,7 @@ class ScraperTriggerRequest(BaseModel):
     comercio: str = "la-anonima"  # slug o nombre (ej: "la-anonima", "Carrefour")
     sucursal: str  # Puede ser el nombre (ej: "Trelew", "Online") o el codigo_sucursal ("RAWSON_01")
     limite_productos: Optional[int] = 100
+    precio_maximo: Optional[float] = None  # Filtra productos con precio > este valor (ej: 50000)
 
 class ScraperJobOut(BaseModel):
     id: UUID

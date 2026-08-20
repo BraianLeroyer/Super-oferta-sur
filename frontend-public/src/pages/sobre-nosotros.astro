@@ -1,0 +1,155 @@
+---
+// src/pages/sobre-nosotros.astro
+import Layout from '../layouts/Layout.astro';
+import StaticNav from '../components/StaticNav.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<Layout title="Sobre Nosotros - Super Oferta Sur">
+  <StaticNav currentPage="nosotros" />
+
+  <main class="min-h-screen bg-slate-50">
+    {/* Hero Section */}
+    <section class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-800 text-white py-16 sm:py-24 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      <div class="absolute inset-0 bg-[radial-gradient(#dc2626_1px,transparent_1px)] [background-size:24px_24px] opacity-15"></div>
+      
+      <div class="max-w-4xl mx-auto text-center relative z-10 space-y-6">
+        <span class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-black uppercase tracking-wider">
+          💡 Proyecto Independiente y Comunitario
+        </span>
+        <h1 class="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-tight">
+          Transparencia de precios para las familias de la <span class="text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-orange-300 to-amber-300">Patagonia</span>
+        </h1>
+        <p class="text-base sm:text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
+          <strong>Super Oferta Sur</strong> nació con una misión clara: poner a disposición de los vecinos de Chubut y la Patagonia una herramienta para comparar precios reales, encontrar ofertas vigentes y optimizar el gasto en las compras del hogar y de comercios.
+        </p>
+        <div class="pt-4 flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-xs font-bold">
+          <span class="px-4 py-2 bg-white/10 rounded-xl border border-white/10 flex items-center gap-2">
+            🛒 6 Cadenas Principales
+          </span>
+          <span class="px-4 py-2 bg-white/10 rounded-xl border border-white/10 flex items-center gap-2">
+            📍 20 Sucursales en Chubut
+          </span>
+          <span class="px-4 py-2 bg-white/10 rounded-xl border border-white/10 flex items-center gap-2">
+            📦 Precios por Unidad y por Bulto
+          </span>
+        </div>
+      </div>
+    </section>
+
+    {/* Content Section */}
+    <section class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 space-y-16">
+      
+      {/* ¿De qué trata? */}
+      <div class="bg-white rounded-3xl p-8 sm:p-12 shadow-xl shadow-slate-200/50 border border-slate-200 space-y-6">
+        <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-red-50 text-anonima-red font-black text-2xl">
+          🔍
+        </div>
+        <h2 class="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+          ¿De qué trata este proyecto?
+        </h2>
+        <div class="text-slate-600 text-sm sm:text-base leading-relaxed space-y-4">
+          <p>
+            En el sur argentino, las distancias y la gran variedad de comercios generan diferencias considerables de precios en los mismos artículos de consumo diario. Un producto de almacén, limpieza o perfumería puede variar notablemente de costo según el supermercado, la sucursal o las promociones vigentes de la semana.
+          </p>
+          <p>
+            <strong>Super Oferta Sur</strong> centraliza y unifica la información de precios de las principales cadenas de la región para que cualquier persona pueda buscar y comparar sin tener que recorrer múltiples páginas o sucursales físicas:
+          </p>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2">
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-red-600"></span> La Anónima
+            </div>
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span> Carrefour
+            </div>
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-green-600"></span> Jumbo
+            </div>
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> Vea
+            </div>
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-yellow-500"></span> Mas Online
+            </div>
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-lime-600"></span> Yaguar (Mayorista)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Características Clave */}
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-3">
+          <div class="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center font-bold text-xl">
+            ⚖️
+          </div>
+          <h3 class="font-extrabold text-slate-900 text-lg">Comparador de Precios</h3>
+          <p class="text-xs text-slate-500 leading-relaxed">
+            Hacé clic en cualquier producto para contrastar al instante su valor en los demás comercios de tu zona.
+          </p>
+        </div>
+
+        <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-xl">
+            📦
+          </div>
+          <h3 class="font-extrabold text-slate-900 text-lg">Precios Mayoristas</h3>
+          <p class="text-xs text-slate-500 leading-relaxed">
+            Visualizá compras por bulto cerrado y packs promocionales para compras familiares o de pequeños comerciantes.
+          </p>
+        </div>
+
+        <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xl">
+            📝
+          </div>
+          <h3 class="font-extrabold text-slate-900 text-lg">Lista de Compras</h3>
+          <p class="text-xs text-slate-500 leading-relaxed">
+            Armá tu lista sumando productos de cualquier comercio, calculá el total estimado y copiala en un solo clic.
+          </p>
+        </div>
+      </div>
+
+      {/* Sobre el creador / Nota personal (sin jerga técnica) */}
+      <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-3xl p-8 sm:p-12 shadow-xl space-y-6">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center text-white font-black text-xl shadow-md">
+            👤
+          </div>
+          <div>
+            <h3 class="text-xl sm:text-2xl font-black text-white">Sobre el Creador</h3>
+            <p class="text-xs text-red-300 font-semibold">Compromiso con la Comunidad Patagónica</p>
+          </div>
+        </div>
+
+        <div class="text-slate-300 text-sm sm:text-base leading-relaxed space-y-4">
+          <p>
+            Hola, soy un vecino de la Patagonia y desarrollador de este proyecto. La idea nació al buscar una forma sencilla de saber dónde convenía hacer las compras del mes entre <strong>Trelew, Rawson, Puerto Madryn, Comodoro Rivadavia y Esquel</strong>, sin tener que consultar folletos dispersos o páginas complejas.
+          </p>
+          <p>
+            Este sitio es de acceso <strong>100% gratuito y libre</strong>. No tiene publicidad invasiva ni comercializa datos de los usuarios. Su único objetivo es empoderar a los consumidores con información clara y transparente.
+          </p>
+          <p>
+            No vendemos productos directamente: cada ficha incluye el enlace oficial al comercio para que puedas realizar tus compras en sus canales oficiales con total confianza.
+          </p>
+        </div>
+
+        <div class="pt-4 border-t border-slate-700 flex flex-wrap items-center justify-between gap-4">
+          <span class="text-xs text-slate-400">
+            ¿Tenés dudas, comentarios o sugerencias de mejora?
+          </span>
+          <a
+            href="/"
+            class="px-5 py-2.5 bg-anonima-red hover:bg-anonima-darkred text-white text-xs font-black rounded-xl transition-all shadow-lg shadow-red-900/30"
+          >
+            Explorar el Catálogo ➔
+          </a>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <Footer />
+</Layout>

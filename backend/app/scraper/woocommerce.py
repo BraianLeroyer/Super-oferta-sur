@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional
 
 from app.scraper.base import BaseScraper
 from app.scraper.anti_blocking import random_delay_async
+from app.scraper.comercios_data import get_sucursal_config
 
 logger = logging.getLogger(__name__)
 
@@ -13,11 +14,12 @@ class WooCommerceScraper(BaseScraper):
 
     Usa la REST API pública de la tienda:
         /wp-json/wc/store/v1/products?per_page=100&page=N
+    (o /{sucursal_path}/wp-json/wc/store/v1/products en multisitios como Yaguar).
     Paginando hasta agotar el catálogo o alcanzar el límite.
     Algunas tiendas (ej. Diarco) devuelven price 0 por API: en ese caso se
     hace un fallback scrapeando la página HTML del producto para obtener el precio.
     El "bulto cerrado" se detecta por marcadores en el título (x6 un, bulto, pack...)
-    y se estima el precio unitario dividiendo el precio del bulto.
+    o por la cantidad mínima de compra mayorista (add_to_cart.minimum > 1).
     """
 
     API_PATH = "/wp-json/wc/store/v1/products"
@@ -32,6 +34,10 @@ class WooCommerceScraper(BaseScraper):
     def __init__(self, sucursal_query: str, comercio: Dict[str, Any]):
         super().__init__(sucursal_query, comercio)
         self.base_url = (comercio.get("base_url") or "").rstrip("/")
+        suc_cfg = get_sucursal_config(comercio, sucursal_query)
+        self.branch_path = suc_cfg.get("path", "")
+        if not self.branch_path and comercio.get("slug") == "yaguar":
+            self.branch_path = "/trelew"
 
     async def _fetch_price_from_page(self, permalink: str) -> Optional[float]:
         """Fallback: parsea el precio de la página HTML del producto (WooCommerce render)."""
@@ -105,6 +111,9 @@ class WooCommerceScraper(BaseScraper):
         marca = ""
         unidad = self._parse_unit(titulo)
 
+        add_to_cart = raw.get("add_to_cart") or {}
+        min_qty = int(add_to_cart.get("minimum") or 1)
+
         precio_bulto = None
         descripcion_bulto = None
         precio_oferta = None
@@ -115,6 +124,10 @@ class WooCommerceScraper(BaseScraper):
                 precio_bulto = round(bulk["precio_bulto"], 2)
                 descripcion_bulto = bulk["descripcion_bulto"]
                 precio_lista = bulk["precio_lista"]
+            elif min_qty > 1:
+                precio_bulto = round(price * min_qty, 2)
+                descripcion_bulto = f"Bulto x{min_qty}"
+                precio_lista = price
             else:
                 precio_lista = price
                 if sale is not None and sale < price:
@@ -147,9 +160,10 @@ class WooCommerceScraper(BaseScraper):
         seen: set = set()
         page = 1
         max_total = self.MAX_TOTAL if limit is None else min(limit, self.MAX_TOTAL)
+        api_path = f"{self.branch_path}{self.API_PATH}"
 
         while len(productos) < max_total:
-            url = f"{self.base_url}{self.API_PATH}?per_page={self.PAGE_SIZE}&page={page}&orderby=id&order=asc"
+            url = f"{self.base_url}{api_path}?per_page={self.PAGE_SIZE}&page={page}&orderby=id&order=asc"
             try:
                 await random_delay_async(1.0, 2.0)
                 async with self._new_client() as client:

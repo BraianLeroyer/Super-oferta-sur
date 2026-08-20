@@ -1,0 +1,35 @@
+---
+// src/pages/sucursales.astro
+import Layout from '../layouts/Layout.astro';
+import StaticNav from '../components/StaticNav.astro';
+import Footer from '../components/Footer.astro';
+import SucursalesDirectory from '../components/SucursalesDirectory.jsx';
+---
+
+<Layout title="Sucursales y Localidades - Super Oferta Sur">
+  <StaticNav currentPage="sucursales" />
+
+  <main class="min-h-screen bg-slate-50">
+    {/* Hero Section */}
+    <section class="bg-gradient-to-b from-slate-900 to-slate-800 text-white py-12 sm:py-16 px-4 sm:px-6 lg:px-8">
+      <div class="max-w-6xl mx-auto text-center space-y-4">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full text-xs font-black uppercase tracking-wider">
+          📍 Cobertura Regional en Chubut
+        </span>
+        <h1 class="text-3xl sm:text-5xl font-black tracking-tight">
+          Sucursales y Localidades Monitoreadas
+        </h1>
+        <p class="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed">
+          Consultá los comercios y sucursales activas en <strong>Trelew, Puerto Madryn, Comodoro Rivadavia, Rawson y Esquel</strong>. Compará precios minoristas y mayoristas por zona.
+        </p>
+      </div>
+    </section>
+
+    {/* Directory Island */}
+    <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <SucursalesDirectory client:load />
+    </section>
+  </main>
+
+  <Footer />
+</Layout>

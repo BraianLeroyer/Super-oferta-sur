@@ -76,7 +76,7 @@ COMERCIOS: Dict[str, Dict[str, Any]] = {
         "scraping_modo": "woocommerce",
         "color": "#78BE20",
         "sucursales": [
-            {"codigo": "YAGUAR_TRELEW", "nombre": "Trelew", "provincia": "Chubut", "tipo_sucursal": "mayorista"},
+            {"codigo": "YAGUAR_TRELEW", "nombre": "Trelew", "provincia": "Chubut", "tipo_sucursal": "mayorista", "path": "/trelew"},
         ],
     },
 }

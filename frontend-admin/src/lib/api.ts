@@ -108,13 +108,18 @@ export async function fetchSucursales(comercio_id?: number): Promise<Sucursal[]>
 export async function triggerScraper(
   comercio: string,
   sucursal: string,
-  limite_productos: number = 50
+  limite_productos: number = 50,
+  precio_maximo?: number | null
 ): Promise<ScraperJob | null> {
   try {
+    const body: Record<string, unknown> = { comercio, sucursal, limite_productos };
+    if (precio_maximo != null && precio_maximo > 0) {
+      body.precio_maximo = precio_maximo;
+    }
     const res = await fetch(`${API_BASE_URL}/scraper/trigger`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ comercio, sucursal, limite_productos })
+      body: JSON.stringify(body)
     });
     if (!res.ok) return null;
     return await res.json();

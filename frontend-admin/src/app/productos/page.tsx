@@ -145,10 +145,16 @@ export default function ProductosPage() {
                   </span>
                 </td>
                 <td className="py-3.5 px-4 font-bold text-white">
-                  ${Number(p.precio_actual_lista || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                  {p.precio_actual_lista && Number(p.precio_actual_lista) > 0 ? (
+                    `$${Number(p.precio_actual_lista).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
+                  ) : p.precio_bulto && Number(p.precio_bulto) > 0 ? (
+                    <span className="text-amber-400/90 text-xs">Por bulto</span>
+                  ) : (
+                    <span className="text-slate-500">-</span>
+                  )}
                 </td>
                 <td className="py-3.5 px-4">
-                  {p.precio_actual_oferta ? (
+                  {p.precio_actual_oferta && Number(p.precio_actual_oferta) > 0 ? (
                     <span className="font-bold text-emerald-400">
                       ${Number(p.precio_actual_oferta).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                     </span>
@@ -157,7 +163,7 @@ export default function ProductosPage() {
                   )}
                 </td>
                 <td className="py-3.5 px-4">
-                  {p.precio_bulto ? (
+                  {p.precio_bulto && Number(p.precio_bulto) > 0 ? (
                     <span className="font-bold text-amber-400">
                       ${Number(p.precio_bulto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                       {p.descripcion_bulto && <span className="block text-[10px] text-amber-600">{p.descripcion_bulto}</span>}

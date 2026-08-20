@@ -6,6 +6,7 @@ interface Props {
 const { title } = Astro.props;
 import '../styles/global.css';
 import { ViewTransitions } from 'astro:transitions';
+import CookieConsentBanner from '../components/CookieConsentBanner.jsx';
 ---
 
 <!doctype html>
@@ -21,5 +22,6 @@ import { ViewTransitions } from 'astro:transitions';
 	</head>
 	<body class="bg-slate-50 text-slate-900 antialiased">
 		<slot />
+		<CookieConsentBanner client:load />
 	</body>
 </html>

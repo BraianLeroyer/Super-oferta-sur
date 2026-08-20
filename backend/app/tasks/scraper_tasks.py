@@ -1,10 +1,14 @@
 import asyncio
+import logging
 import threading
 from datetime import datetime
 from uuid import UUID
 from celery import shared_task
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.database import SessionLocal
+
+logger = logging.getLogger(__name__)
 from app.models.comercio import Comercio
 from app.models.sucursal import Sucursal
 from app.models.producto import Producto
@@ -14,28 +18,63 @@ from app.scraper.registry import get_comercio_config, get_scraper
 from app.scraper.comercios_data import get_sucursal_config
 
 
-def _run_extraction_coro(scraper, limit):
-    """Ejecuta la extracción async en un event loop propio dentro de un thread.
-
-    Funciona tanto desde Celery (sin loop corriendo) como desde el startup de
-    FastAPI o BackgroundTasks (donde ya hay un loop en ejecución y
-    `asyncio.run()` lanzaría "cannot be called from a running event loop").
-    """
+def _run_extraction_coro(scraper, limit, brands_to_search=None, precio_maximo=None):
+    """Ejecuta la extracción async en un event loop propio dentro de un thread."""
     result = {}
 
     def runner():
-        result["items"] = asyncio.run(scraper.run_extraction(limit=limit))
+        result["items"] = asyncio.run(
+            scraper.run_extraction(
+                limit=limit,
+                brands_to_search=brands_to_search,
+                precio_maximo=precio_maximo,
+            )
+        )
 
     t = threading.Thread(target=runner, daemon=True)
     t.start()
     t.join()
     return result["items"]
 
+
+def _get_missing_brands(db: Session, comercio_slug: str) -> list:
+    """Obtiene marcas que existen en otras cadenas VTEX pero no en la cadena actual."""
+    vtex_slugs = ['carrefour', 'jumbo', 'vea', 'mas_online']
+
+    # Marcas presentes en la cadena actual
+    current_brands = set()
+    result = db.query(Producto.marca).join(Comercio).filter(
+        Comercio.slug == comercio_slug,
+        Producto.marca.isnot(None),
+        Producto.marca != '',
+    ).distinct().all()
+    for row in result:
+        current_brands.add(row[0])
+
+    # Marcas presentes en OTRAS cadenas VTEX
+    other_brands = set()
+    result = db.query(Producto.marca).join(Comercio).filter(
+        Comercio.slug.in_([s for s in vtex_slugs if s != comercio_slug]),
+        Producto.marca.isnot(None),
+        Producto.marca != '',
+    ).distinct().all()
+    for row in result:
+        other_brands.add(row[0])
+
+    missing = sorted(other_brands - current_brands)
+    # Filtrar marcas basura (solo caracteres especiales, muy cortas, etc.)
+    missing = [b for b in missing if len(b) > 1 and any(c.isalpha() for c in b)]
+    logger.info(f"[VTEX {comercio_slug}] Marcas faltantes de otras cadenas: {len(missing)}")
+    return missing
+
 @shared_task(name="run_scraper_job_task")
-def run_scraper_job_task(job_id_str: str, comercio_query: str, sucursal_query: str, limit: int = 100):
+def run_scraper_job_task(job_id_str: str, comercio_query: str, sucursal_query: str, limit: int = 100, precio_maximo: float = None):
     """
     Tarea Celery asíncrona para ejecutar el raspado de productos por comercio y sucursal.
+    Si precio_maximo se indica, filtra productos con precio mayor a ese valor.
+    Si la cadena es VTEX, ejecuta búsqueda complementaria por marcas faltantes.
     """
+    logger = logging.getLogger(__name__)
     db: Session = SessionLocal()
     job_id = UUID(job_id_str)
 
@@ -92,7 +131,15 @@ def run_scraper_job_task(job_id_str: str, comercio_query: str, sucursal_query: s
 
         # Ejecutar extracción asíncrona en bucle
         scraper = get_scraper(comercio_query, sucursal_query)
-        extracted_items = _run_extraction_coro(scraper, limit)
+
+        # Para cadenas VTEX, buscar marcas faltantes de otras cadenas
+        brands_to_search = None
+        scraping_modo = comercio_cfg.get("scraping_modo", "")
+        if scraping_modo == "vtex" and limit is None:
+            brands_to_search = _get_missing_brands(db, comercio_cfg["slug"])
+            logger.info(f"[{comercio_cfg['slug']}] Expansion por marcas: {len(brands_to_search)} marcas a buscar.")
+
+        extracted_items = _run_extraction_coro(scraper, limit, brands_to_search, precio_maximo)
 
         total_scraped = 0
         total_errors = 0

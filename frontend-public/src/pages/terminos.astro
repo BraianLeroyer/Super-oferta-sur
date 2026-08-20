@@ -1,0 +1,119 @@
+---
+// src/pages/terminos.astro
+import Layout from '../layouts/Layout.astro';
+import StaticNav from '../components/StaticNav.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<Layout title="Términos y Condiciones - Super Oferta Sur">
+  <StaticNav currentPage="terminos" />
+
+  <main class="min-h-screen bg-slate-50 py-12 sm:py-16 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-4xl mx-auto space-y-8">
+      
+      {/* Header */}
+      <div class="bg-white rounded-3xl p-8 sm:p-12 border border-slate-200 shadow-sm space-y-4">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-xs font-bold">
+          📄 Condiciones de Uso
+        </span>
+        <h1 class="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
+          Términos y Condiciones de Servicio
+        </h1>
+        <p class="text-sm text-slate-500 font-medium">
+          Última actualización: 20 de Agosto de 2026
+        </p>
+        <p class="text-sm sm:text-base text-slate-600 leading-relaxed pt-2">
+          Al acceder y navegar en el portal <strong>Super Oferta Sur</strong>, aceptás los siguientes términos y condiciones de uso general.
+        </p>
+      </div>
+
+      {/* Sections */}
+      <div class="bg-white rounded-3xl p-8 sm:p-12 border border-slate-200 shadow-sm space-y-10 text-slate-700 text-sm sm:text-base leading-relaxed">
+        
+        {/* 1. Naturaleza del servicio */}
+        <section class="space-y-3">
+          <h2 class="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-red-100 text-anonima-red flex items-center justify-center text-sm font-bold">1</span>
+            Finalidad exclusivamente informativa
+          </h2>
+          <p>
+            <strong>Super Oferta Sur</strong> es una herramienta digital de acceso libre y gratuito orientada a la comparación de precios, detección de ofertas y análisis de costos en comercios minoristas y mayoristas de la Patagonia argentina.
+          </p>
+          <p>
+            La plataforma <strong>no vende, factura, almacena ni distribuye</strong> productos de ningún tipo. Toda adquisición se efectúa directamente en las tiendas físicas o plataformas electrónicas oficiales de cada supermercado o distribuidora.
+          </p>
+        </section>
+
+        {/* 2. Exactitud y vigencia de los precios */}
+        <section class="space-y-3">
+          <h2 class="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-red-100 text-anonima-red flex items-center justify-center text-sm font-bold">2</span>
+            Vigencia de precios y stock
+          </h2>
+          <p>
+            Los precios, promociones, descuentos (como 3x2, combos o precios por bulto cerrado) y niveles de disponibilidad son extraídos automáticamente de las fuentes públicas de los comercios.
+          </p>
+          <p>
+            Dado que las cadenas comerciales pueden modificar sus listas de precios o agotar existencias en góndola en cualquier momento, los valores mostrados en la plataforma son de carácter orientativo. El precio definitivo siempre será el registrado en la caja o ticket emitido por el comercio al momento de la compra.
+          </p>
+        </section>
+
+        {/* 3. Propiedad Intelectual y Marcas */}
+        <section class="space-y-3">
+          <h2 class="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-red-100 text-anonima-red flex items-center justify-center text-sm font-bold">3</span>
+            Marcas Comerciales y Logotipos
+          </h2>
+          <p>
+            Los nombres, marcas comerciales, logotipos, imágenes de producto y denominaciones de los supermercados y mayoristas (incluyendo: <em>La Anónima, Carrefour, Jumbo, Vea, Mas Online, Yaguar</em>) pertenecen a sus respectivos titulares legales.
+          </p>
+          <p>
+            Su mención en esta plataforma se realiza al solo efecto de identificar el origen de los productos y precios comparados, en el marco del derecho a la información de los consumidores.
+          </p>
+        </section>
+
+        {/* 4. Contacto y Consultas */}
+        <section class="space-y-3 p-6 bg-slate-50 border border-slate-200 rounded-2xl">
+          <h2 class="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-red-100 text-anonima-red flex items-center justify-center text-sm font-bold">4</span>
+            Canal de Contacto y Consultas
+          </h2>
+          <p>
+            Por cualquier consulta, reporte de discrepancia en precios, sugerencia o comunicación sobre el servicio, podés escribir a nuestro correo de contacto:
+          </p>
+          <div class="flex items-center gap-2 font-bold text-slate-900 bg-white px-4 py-3 rounded-xl border border-slate-200 w-fit">
+            <span>✉️ Correo Oficial:</span>
+            <a href="mailto:contacto@superofertasur.com.ar" class="text-anonima-red hover:underline font-mono">
+              contacto@superofertasur.com.ar
+            </a>
+          </div>
+        </section>
+
+        {/* 5. Legislación */}
+        <section class="space-y-3">
+          <h2 class="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-red-100 text-anonima-red flex items-center justify-center text-sm font-bold">5</span>
+            Legislación Aplicable
+          </h2>
+          <p>
+            Estos términos se rigen por las leyes de la <strong>República Argentina</strong>.
+          </p>
+        </section>
+
+      </div>
+
+      {/* Back button */}
+      <div class="text-center pt-4">
+        <a
+          href="/"
+          class="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black rounded-xl transition-colors shadow-md"
+        >
+          ➔ Volver al Catálogo de Ofertas
+        </a>
+      </div>
+
+    </div>
+  </main>
+
+  <Footer />
+</Layout>

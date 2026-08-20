@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { fetchJobs, fetchSucursales, fetchProductosAdmin, fetchComercios, triggerScraper, ScraperJob, Sucursal, Producto, Comercio } from '@/lib/api';
-import { MapPin, Play, Activity, Database, Store, CheckCircle2, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
+import { MapPin, Play, Activity, Database, Store, CheckCircle2, Clock, AlertTriangle, RefreshCw, Info } from 'lucide-react';
 
 export default function DashboardPage() {
   const [comercios, setComercios] = useState<Comercio[]>([]);
@@ -14,6 +14,7 @@ export default function DashboardPage() {
   const [selectedSucursal, setSelectedSucursal] = useState('');
   const [triggering, setTriggering] = useState(false);
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
+  const [precioMaximo, setPrecioMaximo] = useState<string>('');
 
   const loadData = async () => {
     setLoading(true);
@@ -55,7 +56,8 @@ export default function DashboardPage() {
     }
     setTriggering(true);
     setTriggerMessage(null);
-    const res = await triggerScraper(selectedComercio.slug, selectedSucursal, 50);
+    const precioMax = precioMaximo ? Number(precioMaximo) : null;
+    const res = await triggerScraper(selectedComercio.slug, selectedSucursal, 50, precioMax);
     setTriggering(false);
     if (res) {
       setTriggerMessage(`✅ Tarea de raspado enviada para ${selectedComercio.nombre} / ${selectedSucursal} (ID: ${res.id.slice(0, 8)})`);
@@ -137,6 +139,16 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Aviso de productos catálogo */}
+      <div className="bg-amber-950/40 border border-amber-800/40 rounded-2xl p-4 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+        <div className="text-xs text-amber-200 leading-relaxed">
+          <span className="font-black">Aviso:</span> Muchos productos listados provienen del catálogo online
+          y pueden no estar disponibles en las sucursales físicas.
+          Para confirmar precios y disponibilidad, visitá las páginas oficiales de cada comercio.
+        </div>
+      </div>
+
       {/* Trigger Scraper Panel */}
       <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-red-950/40 border border-slate-800 rounded-2xl p-6 shadow-xl">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -177,6 +189,16 @@ export default function DashboardPage() {
                 </option>
               ))}
             </select>
+
+            <input
+              type="number"
+              placeholder="Precio Max ($)"
+              value={precioMaximo}
+              onChange={(e) => setPrecioMaximo(e.target.value)}
+              min="0"
+              step="1000"
+              className="w-full sm:w-36 bg-slate-950 text-white font-bold text-xs border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-anonima-red placeholder-slate-500"
+            />
 
             <button
               type="submit"

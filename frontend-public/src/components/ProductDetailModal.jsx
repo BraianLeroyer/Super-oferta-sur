@@ -2,14 +2,14 @@ import React, { useEffect } from 'react';
 import { Tag, TrendingDown, CheckCircle2, XCircle, X, ExternalLink, MapPin, Boxes } from 'lucide-react';
 
 export default function ProductDetailModal({ product, onClose }) {
-  const hasOffer = Boolean(product.precio_actual_oferta);
-  const hasBulto = Boolean(product.precio_bulto);
   const priceList = Number(product.precio_actual_lista || 0);
   const priceOffer = Number(product.precio_actual_oferta || 0);
   const priceBulto = Number(product.precio_bulto || 0);
+  const hasOffer = Boolean(product.precio_actual_oferta) && priceOffer > 0;
+  const hasBulto = Boolean(product.precio_bulto) && priceBulto > 0;
   const productUrl = product.url_producto || null;
 
-  const discountPercent = hasOffer && priceList > 0
+  const discountPercent = hasOffer && priceList > 0 && priceOffer < priceList
     ? Math.round(((priceList - priceOffer) / priceList) * 100)
     : 0;
 
@@ -59,7 +59,7 @@ export default function ProductDetailModal({ product, onClose }) {
 
           {/* Details */}
           <div className="p-6 flex flex-col gap-4">
-            {hasOffer && (
+            {hasOffer && discountPercent > 0 && (
               <div className="flex items-center gap-3">
                 <span className="bg-anonima-red text-white text-lg font-black px-4 py-2 rounded-full ring-2 ring-red-100 shadow-lg flex items-center gap-1">
                   <TrendingDown className="w-5 h-5" />
@@ -72,6 +72,12 @@ export default function ProductDetailModal({ product, onClose }) {
                   </span>
                 )}
               </div>
+            )}
+
+            {product.es_oferta_semanal && (
+              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-full text-xs font-bold w-fit">
+                🏷️ Oferta Semanal
+              </span>
             )}
 
             {!hasOffer && product.es_oferta_club && (
@@ -117,15 +123,31 @@ export default function ProductDetailModal({ product, onClose }) {
                   <div className="text-3xl font-black text-anonima-red tracking-tight">
                     ${priceOffer.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                   </div>
-                  <div className="text-sm text-slate-400 line-through font-medium mt-1">
+                  {priceList > 0 && (
+                    <div className="text-sm text-slate-400 line-through font-medium mt-1">
+                      ${priceList.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                    </div>
+                  )}
+                </div>
+              ) : priceList > 0 ? (
+                <div>
+                  <div className="text-xs text-slate-500 font-semibold mb-1">Precio</div>
+                  <div className="text-3xl font-black text-slate-900 tracking-tight">
                     ${priceList.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+              ) : priceBulto > 0 ? (
+                <div>
+                  <div className="text-xs text-slate-500 font-semibold mb-1">Precio por bulto</div>
+                  <div className="text-3xl font-black text-slate-900 tracking-tight">
+                    ${priceBulto.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                   </div>
                 </div>
               ) : (
                 <div>
                   <div className="text-xs text-slate-500 font-semibold mb-1">Precio</div>
-                  <div className="text-3xl font-black text-slate-900 tracking-tight">
-                    ${priceList.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                  <div className="text-xl font-bold text-slate-500">
+                    Consultar precio
                   </div>
                 </div>
               )}
@@ -141,6 +163,19 @@ export default function ProductDetailModal({ product, onClose }) {
                 )}
               </div>
             </div>
+
+            {/* Aclaración de condición de oferta */}
+            {hasOffer && priceList > 0 && (
+              <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-3.5 text-xs text-amber-900 flex items-start gap-2.5">
+                <span className="text-base shrink-0">💡</span>
+                <div className="space-y-1">
+                  <span className="font-bold text-amber-950 block">Aclaración sobre el precio en oferta:</span>
+                  <p className="leading-relaxed text-amber-900/90">
+                    El valor promocional de <strong>${priceOffer.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</strong> aplica bajo las condiciones comerciales vigentes en tienda (descuento directo o promociones por volumen tipo 3x2 / 2do al 70%). Si se adquiere <strong>1 sola unidad individual sin promoción</strong>, se abona el precio de lista pleno (<strong>${priceList.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</strong>).
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Bulto cerrado (mayoristas) */}
             {hasBulto && (

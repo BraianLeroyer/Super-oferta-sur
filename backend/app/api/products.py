@@ -2,7 +2,7 @@ from typing import List, Optional, Any
 import re
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, or_
 from app.database import get_db
 from app.models.producto import Producto
 from app.models.precio_historial import PrecioHistorial
@@ -10,6 +10,7 @@ from app.models.sucursal import Sucursal
 from app.models.comercio import Comercio
 from app.schemas.producto import ProductoOut, ProductoDetailOut
 from app.schemas.precio_historial import PrecioHistorialOut
+from app.schemas.comparison import ComparacionComercioOut, ComparacionItemOut, ComparacionOriginalOut, ComparacionResponseOut
 from app.scraper.ofertas_semanales import YAGUAR_OFERTA_SEMANAL_SKUS
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -155,7 +156,20 @@ def get_products(
             query = query.filter(Producto.titulo.notilike(f"%{_kw}%"))
 
     if oferta_semanal:
-        query = query.filter(Producto.sku.in_(YAGUAR_OFERTA_SEMANAL_SKUS))
+        yaguar_ofertas_subquery = (
+            db.query(PrecioHistorial.producto_id)
+            .join(Sucursal, Sucursal.id == PrecioHistorial.sucursal_id)
+            .join(Comercio, Comercio.id == Sucursal.comercio_id)
+            .filter(
+                Comercio.slug == "yaguar",
+                or_(
+                    Producto.sku.in_(YAGUAR_OFERTA_SEMANAL_SKUS),
+                    PrecioHistorial.precio_oferta.isnot(None),
+                )
+            )
+            .distinct()
+        )
+        query = query.filter(Producto.id.in_(yaguar_ofertas_subquery))
 
     if search:
         # Búsqueda GENERAL: por nombre, marca, categoría y SKU, ignorando
@@ -188,16 +202,22 @@ def get_products(
     for prod in productos:
         latest_price = latest_by_product.get(prod.id)
 
-        # Si hay filtro por precio
+        if selected_sucursal_id and latest_price is None:
+            continue
+
         if latest_price:
-            effective_price = float(latest_price.precio_oferta or latest_price.precio_lista)
+            effective_price = float(latest_price.precio_oferta or latest_price.precio_lista or latest_price.precio_bulto or 0)
+            if effective_price <= 0:
+                continue
             if min_price is not None and effective_price < min_price:
                 continue
             if max_price is not None and effective_price > max_price:
                 continue
 
         d = _producto_out_dict(prod, latest_price)
-        d["es_oferta_semanal"] = str(prod.sku) in YAGUAR_OFERTA_SEMANAL_SKUS
+        d["es_oferta_semanal"] = str(prod.sku) in YAGUAR_OFERTA_SEMANAL_SKUS or (
+            prod.comercio is not None and prod.comercio.slug == "yaguar" and bool(latest_price and latest_price.precio_oferta)
+        )
         result.append(d)
 
     return result
@@ -276,6 +296,183 @@ def get_categorias(
         q = q.filter(Producto.comercio_id == comercio_id)
     rows = q.distinct().order_by(Producto.categoria.asc()).all()
     return [row[0] for row in rows]
+
+
+import unicodedata
+
+_STOPWORDS = {'de', 'del', 'la', 'el', 'las', 'los', 'un', 'una', 'unos', 'unas',
+              'x', 'con', 'por', 'para', 'en', 'al', 'a', 'y', 'o', 'e', 'the',
+              'ml', 'cc', 'lt', 'lts', 'kg', 'gr', 'grs', 'g', 'zs', 'zz'}
+
+
+def _normalize_title_tokens(title: str) -> List[str]:
+    """Extrae tokens significativos de un título (sin acentos, sin stopwords, ≥ 3 chars).
+    Divide en no-alfanuméricos para manejar 'c/Palo' -> 'palo', '500g' -> '500'."""
+    if not title:
+        return []
+    nfkd = unicodedata.normalize('NFKD', title.lower())
+    clean = ''.join(c for c in nfkd if not unicodedata.combining(c))
+    words = re.split(r'[^a-z0-9]+', clean)
+    tokens = []
+    for w in words:
+        if len(w) >= 3 and w not in _STOPWORDS:
+            tokens.append(w)
+    return tokens
+
+
+def _match_score(original_tokens: List[str], candidate_tokens: List[str]) -> float:
+    """Calcula el % de tokens originales que aparecen en el candidato."""
+    if not original_tokens:
+        return 0.0
+    candidate_set = set(candidate_tokens)
+    matched = sum(1 for t in original_tokens if t in candidate_set)
+    return matched / len(original_tokens)
+
+
+@router.get("/{product_id}/compare-prices", response_model=ComparacionResponseOut)
+def compare_product_prices(
+    product_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    GET /api/v1/products/{id}/compare-prices
+    Compara el precio de un producto entre DIFERENTES comercios.
+    Matching estricto: requiere TODOS los tokens significativos + misma categoría.
+    Devuelve el producto original + todos los matches por comercio ordenados de menor a mayor.
+    """
+    producto = db.query(Producto).filter(Producto.id == product_id).first()
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    # Obtener precio del original
+    latest_original = (
+        db.query(PrecioHistorial)
+        .filter(PrecioHistorial.producto_id == product_id)
+        .order_by(desc(PrecioHistorial.fecha_captura), desc(PrecioHistorial.id))
+        .first()
+    )
+
+    original_out = ComparacionOriginalOut(
+        producto_id=producto.id,
+        titulo=producto.titulo,
+        marca=producto.marca,
+        imagen_url=producto.imagen_url,
+        unidad_medida=producto.unidad_medida,
+        comercio_nombre=producto.comercio.nombre if producto.comercio else "Desconocido",
+        precio_lista=latest_original.precio_lista if latest_original else None,
+        precio_oferta=latest_original.precio_oferta if latest_original else None,
+    )
+
+    # Tokens significativos del título original
+    original_tokens = _normalize_title_tokens(producto.titulo)
+    if not original_tokens:
+        return ComparacionResponseOut(producto_original=original_out, comercios=[])
+
+    # Buscar en OTROS comercios: TODOS los tokens del título deben aparecer
+    query = db.query(Producto).filter(
+        Producto.comercio_id != producto.comercio_id,
+    )
+    for token in original_tokens:
+        pattern = _accent_insensitive_pattern(token)
+        query = query.filter(Producto.titulo.op('~*')(pattern))
+
+    other_products = query.all()
+    if not other_products:
+        return ComparacionResponseOut(producto_original=original_out, comercios=[])
+
+    # Calcular score de overlap para cada producto
+    scored_products = []
+    for prod in other_products:
+        cand_tokens = _normalize_title_tokens(prod.titulo)
+        score = _match_score(original_tokens, cand_tokens)
+        if score >= 0.6:
+            scored_products.append((prod, score))
+
+    if not scored_products:
+        return ComparacionResponseOut(producto_original=original_out, comercios=[])
+
+    product_ids = [p.id for p, _ in scored_products]
+
+    # Subquery: último PrecioHistorial por (producto, sucursal)
+    subq = (
+        db.query(
+            PrecioHistorial.producto_id,
+            PrecioHistorial.sucursal_id,
+            func.max(PrecioHistorial.id).label("max_id"),
+        )
+        .filter(PrecioHistorial.producto_id.in_(product_ids))
+        .group_by(PrecioHistorial.producto_id, PrecioHistorial.sucursal_id)
+        .subquery()
+    )
+    latest_prices = (
+        db.query(PrecioHistorial)
+        .join(
+            subq,
+            (PrecioHistorial.producto_id == subq.c.producto_id)
+            & (PrecioHistorial.sucursal_id == subq.c.sucursal_id)
+            & (PrecioHistorial.id == subq.c.max_id),
+        )
+        .all()
+    )
+
+    # Indexar: producto_id -> list(ph) de todas las sucursales
+    prices_by_product = {}
+    for ph in latest_prices:
+        prices_by_product.setdefault(ph.producto_id, []).append(ph)
+
+    # Agrupar por comercio
+    comercios_data = {}
+    for prod, score in scored_products:
+        cid = prod.comercio_id
+        ph_list = prices_by_product.get(prod.id, [])
+        best_ph = None
+        best_price = float('inf')
+        for ph in ph_list:
+            p = float(ph.precio_oferta or ph.precio_lista or 0)
+            if 0 < p < best_price:
+                best_price = p
+                best_ph = ph
+        if not best_ph or best_price <= 0:
+            continue
+        if cid not in comercios_data:
+            comercios_data[cid] = {"productos": [], "mejor_precio": best_price}
+        comercios_data[cid]["productos"].append((prod, best_ph, best_price, score))
+        if best_price < comercios_data[cid]["mejor_precio"]:
+            comercios_data[cid]["mejor_precio"] = best_price
+
+    # Construir resultado: ordenar comercios por mejor precio
+    result_comercios = []
+    for cid, data in sorted(comercios_data.items(), key=lambda x: x[1]["mejor_precio"]):
+        comercio = db.query(Comercio).filter(Comercio.id == cid).first()
+        if not comercio:
+            continue
+        # Ordenar productos de este comercio por precio (menor a mayor)
+        prods_sorted = sorted(data["productos"], key=lambda x: x[2])
+        items = []
+        for prod, ph, price, score in prods_sorted:
+            items.append(ComparacionItemOut(
+                producto_id=prod.id,
+                sku=prod.sku,
+                titulo=prod.titulo,
+                marca=prod.marca,
+                imagen_url=prod.imagen_url,
+                unidad_medida=prod.unidad_medida,
+                precio_lista=ph.precio_lista,
+                precio_oferta=ph.precio_oferta,
+                disponible=ph.disponible,
+            ))
+        result_comercios.append(ComparacionComercioOut(
+            comercio_nombre=comercio.nombre,
+            comercio_slug=comercio.slug,
+            comercio_color=comercio.color,
+            mejor_precio=data["mejor_precio"],
+            productos=items,
+        ))
+
+    return ComparacionResponseOut(
+        producto_original=original_out,
+        comercios=result_comercios,
+    )
 
 
 @router.get("/{product_id}/price-history", response_model=ProductoDetailOut)

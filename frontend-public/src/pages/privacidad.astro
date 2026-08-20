@@ -1,0 +1,96 @@
+---
+// src/pages/privacidad.astro
+import Layout from '../layouts/Layout.astro';
+import StaticNav from '../components/StaticNav.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<Layout title="Política de Privacidad y Cookies - Super Oferta Sur">
+  <StaticNav currentPage="privacidad" />
+
+  <main class="min-h-screen bg-slate-50 py-12 sm:py-16 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-4xl mx-auto space-y-8">
+      
+      {/* Header */}
+      <div class="bg-white rounded-3xl p-8 sm:p-12 border border-slate-200 shadow-sm space-y-4">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold">
+          🔒 Legal & Privacidad
+        </span>
+        <h1 class="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
+          Política de Privacidad y Cookies
+        </h1>
+        <p class="text-sm text-slate-500 font-medium">
+          Última actualización: 20 de Agosto de 2026
+        </p>
+        <p class="text-sm sm:text-base text-slate-600 leading-relaxed pt-2">
+          En <strong>Super Oferta Sur</strong> nos tomamos con la máxima seriedad la privacidad y seguridad de quienes nos visitan. Esta política detalla el uso del almacenamiento local y tus derechos.
+        </p>
+      </div>
+
+      {/* Sections */}
+      <div class="bg-white rounded-3xl p-8 sm:p-12 border border-slate-200 shadow-sm space-y-10 text-slate-700 text-sm sm:text-base leading-relaxed">
+        
+        {/* 1. Datos que recopilamos */}
+        <section class="space-y-3">
+          <h2 class="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-red-100 text-anonima-red flex items-center justify-center text-sm font-bold">1</span>
+            Información que procesamos
+          </h2>
+          <p>
+            <strong>Super Oferta Sur no solicita registro, nombres, correos electrónicos, contraseñas ni datos bancarios.</strong>
+          </p>
+          <p>
+            Para brindar la funcionalidad de la plataforma, únicamente se guardan en el navegador del usuario (mediante <code class="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded text-xs">localStorage</code>):
+          </p>
+          <ul class="list-disc pl-6 space-y-1.5 text-slate-600 text-sm">
+            <li><strong>Lista de compras:</strong> los artículos que sumás manualmente para calcular el total estimado.</li>
+            <li><strong>Preferencias de navegación:</strong> el comercio y sucursal seleccionados para recordar tu zona.</li>
+            <li><strong>Aceptación del aviso legal:</strong> la confirmación del banner de consentimiento.</li>
+          </ul>
+        </section>
+
+        {/* 2. Uso de Cookies */}
+        <section class="space-y-3">
+          <h2 class="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-red-100 text-anonima-red flex items-center justify-center text-sm font-bold">2</span>
+            Cookies y Almacenamiento Local
+          </h2>
+          <p>
+            No utilizamos cookies de seguimiento publicitario ni comercializamos perfiles de navegación con terceros. El almacenamiento local es 100% funcional y puede borrarse en cualquier momento limpiando los datos del navegador.
+          </p>
+        </section>
+
+        {/* 3. Contacto por Privacidad */}
+        <section class="space-y-3 p-6 bg-slate-50 border border-slate-200 rounded-2xl">
+          <h2 class="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-red-100 text-anonima-red flex items-center justify-center text-sm font-bold">3</span>
+            Consultas sobre Datos Personales
+          </h2>
+          <p>
+            Para cualquier inquietud sobre nuestra política de privacidad o el tratamiento de datos según la Ley 25.326, podés comunicarte a:
+          </p>
+          <div class="flex items-center gap-2 font-bold text-slate-900 bg-white px-4 py-3 rounded-xl border border-slate-200 w-fit">
+            <span>✉️ Correo de Contacto:</span>
+            <a href="mailto:contacto@superofertasur.com.ar" class="text-anonima-red hover:underline font-mono">
+              contacto@superofertasur.com.ar
+            </a>
+          </div>
+        </section>
+
+      </div>
+
+      {/* Back button */}
+      <div class="text-center pt-4">
+        <a
+          href="/"
+          class="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black rounded-xl transition-colors shadow-md"
+        >
+          ➔ Volver al Catálogo de Ofertas
+        </a>
+      </div>
+
+    </div>
+  </main>
+
+  <Footer />
+</Layout>
