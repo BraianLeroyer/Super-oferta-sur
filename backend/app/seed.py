@@ -69,30 +69,26 @@ def seed_database():
             job_id = None
             db_job: Session = SessionLocal()
             try:
-                ya_raspada = db_job.query(ScraperJob).filter(
-                    ScraperJob.sucursal_id == t["sucursal_id"],
-                    ScraperJob.estado == "FINISHED",
-                ).first()
-                if ya_raspada:
-                    continue
-
                 precios_count = db_job.query(PrecioHistorial).filter(
                     PrecioHistorial.sucursal_id == t["sucursal_id"]
                 ).count()
 
-                if precios_count == 0:
-                    logger.info(f"Poblando datos para {t['comercio_nombre']} / {t['sucursal_nombre']}...")
-                    job_id = uuid.uuid4()
-                    job = ScraperJob(
-                        id=job_id,
-                        comercio_id=t["comercio_id"],
-                        sucursal_id=t["sucursal_id"],
-                        estado="PENDING",
-                        total_scrapeados=0,
-                        total_errores=0,
-                    )
-                    db_job.add(job)
-                    db_job.commit()
+                # Si ya tiene más de 1000 productos cargados, la sucursal está completa
+                if precios_count >= 1000:
+                    continue
+
+                logger.info(f"Poblando datos para {t['comercio_nombre']} / {t['sucursal_nombre']} (actuales: {precios_count})...")
+                job_id = uuid.uuid4()
+                job = ScraperJob(
+                    id=job_id,
+                    comercio_id=t["comercio_id"],
+                    sucursal_id=t["sucursal_id"],
+                    estado="PENDING",
+                    total_scrapeados=0,
+                    total_errores=0,
+                )
+                db_job.add(job)
+                db_job.commit()
             finally:
                 db_job.close()
 

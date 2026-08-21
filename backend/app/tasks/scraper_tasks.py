@@ -166,70 +166,91 @@ def run_scraper_job_task(job_id_str: str, comercio_query: str, sucursal_query: s
 
         # Inserción en flujo por lotes de 300 items para mantener el uso de RAM por debajo de 50MB
         for chunk_idx in range(0, len(extracted_items), CHUNK_SIZE):
-            chunk = extracted_items[chunk_idx : chunk_idx + CHUNK_SIZE]
-            chunk_skus = [it["sku"] for it in chunk]
+            chunk_raw = extracted_items[chunk_idx : chunk_idx + CHUNK_SIZE]
 
-            # 1. Traer solo los IDs y SKUs de este chunk específico (ocupa < 20KB de RAM)
-            existing_chunk = {
-                row[0]: row[1]
-                for row in db.query(Producto.sku, Producto.id).filter(
-                    Producto.comercio_id == comercio.id,
-                    Producto.sku.in_(chunk_skus)
-                ).all()
-            }
+            # Eliminar duplicados de SKU dentro del mismo chunk
+            seen_chunk_skus = set()
+            chunk = []
+            for it in chunk_raw:
+                s = str(it.get("sku") or "").strip()
+                if s and s not in seen_chunk_skus:
+                    seen_chunk_skus.add(s)
+                    chunk.append(it)
 
-            # 2. Crear productos nuevos si no existen en este chunk
-            new_prods = []
-            for item in chunk:
-                sku = item["sku"]
-                if sku not in existing_chunk:
-                    prod = Producto(
-                        comercio_id=comercio.id,
-                        sku=sku,
-                        titulo=item["titulo"],
-                        marca=item.get("marca"),
-                        descripcion=item.get("descripcion"),
-                        imagen_url=item.get("imagen_url"),
-                        unidad_medida=item.get("unidad_medida"),
-                        url_producto=item.get("url_producto"),
-                        categoria=item.get("categoria"),
-                        creado_en=now_dt,
-                        actualizado_en=now_dt
-                    )
-                    new_prods.append(prod)
+            chunk_skus = list(seen_chunk_skus)
+            if not chunk_skus:
+                continue
 
-            if new_prods:
-                db.add_all(new_prods)
-                db.flush()
-                for p in new_prods:
-                    existing_chunk[p.sku] = p.id
+            try:
+                # 1. Traer solo los IDs y SKUs de este chunk específico
+                existing_chunk = {
+                    row[0]: row[1]
+                    for row in db.query(Producto.sku, Producto.id).filter(
+                        Producto.comercio_id == comercio.id,
+                        Producto.sku.in_(chunk_skus)
+                    ).all()
+                }
 
-            # 3. Crear registros de precios para este chunk
-            prices = []
-            for item in chunk:
-                p_id = existing_chunk.get(item["sku"])
-                if not p_id:
-                    continue
-                prices.append(PrecioHistorial(
-                    producto_id=p_id,
-                    sucursal_id=sucursal.id,
-                    precio_lista=item["precio_lista"],
-                    precio_oferta=item.get("precio_oferta"),
-                    precio_bulto=item.get("precio_bulto"),
-                    descripcion_bulto=item.get("descripcion_bulto"),
-                    es_oferta_club=item.get("es_oferta_club", False),
-                    disponible=item.get("disponible", True),
-                    fecha_captura=now_dt
-                ))
+                # 2. Crear productos nuevos si no existen en este chunk
+                new_prods = []
+                for item in chunk:
+                    sku = str(item.get("sku") or "").strip()
+                    if sku not in existing_chunk:
+                        prod = Producto(
+                            comercio_id=comercio.id,
+                            sku=sku,
+                            titulo=item["titulo"],
+                            marca=item.get("marca"),
+                            descripcion=item.get("descripcion"),
+                            imagen_url=item.get("imagen_url"),
+                            unidad_medida=item.get("unidad_medida"),
+                            url_producto=item.get("url_producto"),
+                            categoria=item.get("categoria"),
+                            creado_en=now_dt,
+                            actualizado_en=now_dt
+                        )
+                        new_prods.append(prod)
+                        existing_chunk[sku] = -1 # Placeholder temporal para evitar duplicar en el mismo lote
 
-            if prices:
-                db.add_all(prices)
-                db.commit()
-                total_scraped += len(prices)
+                if new_prods:
+                    db.add_all(new_prods)
+                    db.flush()
+                    for p in new_prods:
+                        existing_chunk[p.sku] = p.id
 
-            # Purgar el mapa de identidad de SQLAlchemy y forzar recolección de basura
-            db.expunge_all()
-            gc.collect()
+                # 3. Crear registros de precios para este chunk
+                prices = []
+                for item in chunk:
+                    sku = str(item.get("sku") or "").strip()
+                    p_id = existing_chunk.get(sku)
+                    if not p_id or p_id == -1:
+                        continue
+                    prices.append(PrecioHistorial(
+                        producto_id=p_id,
+                        sucursal_id=sucursal.id,
+                        precio_lista=item["precio_lista"],
+                        precio_oferta=item.get("precio_oferta"),
+                        precio_bulto=item.get("precio_bulto"),
+                        descripcion_bulto=item.get("descripcion_bulto"),
+                        es_oferta_club=item.get("es_oferta_club", False),
+                        disponible=item.get("disponible", True),
+                        fecha_captura=now_dt
+                    ))
+
+                if prices:
+                    db.add_all(prices)
+                    db.commit()
+                    total_scraped += len(prices)
+
+            except Exception as chunk_err:
+                db.rollback()
+                total_errors += 1
+                logger.warning(f"Error procesando chunk {chunk_idx} en {comercio.slug}: {chunk_err}")
+
+            finally:
+                # Purgar el mapa de identidad de SQLAlchemy y forzar recolección de basura
+                db.expunge_all()
+                gc.collect()
 
         job.estado = "FINISHED"
         job.total_scrapeados = total_scraped

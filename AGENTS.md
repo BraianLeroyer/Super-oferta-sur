@@ -165,13 +165,13 @@ Se generalizó el sistema de "La Anónima por sucursal" a un **monitor multi-mer
 42. **Conexión Directa en Neon vs PgBouncer (`SSL SYSCALL error: EOF detected`)**: el endpoint `-pooler` de Neon utiliza PgBouncer en modo transacción, el cual cierra abruptamente conexiones SSL cuando se combinan con el pool de conexiones de SQLAlchemy (`QueuePool`) durante operaciones intensivas. **Fix:** en `database.py` se sanitiza automáticamente la URL eliminando `-pooler.` (`DATABASE_URL.replace("-pooler.", ".")`) para conectarse directamente al nodo de cómputo PostgreSQL de Neon, garantizando estabilidad total y cero desconexiones SSL.
 43. **Scraping Multi-Departamento VTEX (25.000+ productos por cadena)**: la API VTEX general (`/pub/products/search/`) truncaba a 2.548 productos. **Fix:** en `vtex.py` se implementó raspado por departamentos (`almacen`, `bebidas`, `lacteos`, `limpieza`, `perfumeria`, `electro-y-tecnologia`, `hogar`, `textil`, `deportes`, `jugueteria`, `mascotas`, `bebes`, `congelados`, `frutas-y-verduras`, `carnes`, `panaderia`, `ferreteria`), permitiendo cosechar más de 25.000 productos reales por sucursal en Carrefour, Jumbo, Vea y Mas Online. En `api.ts` del portal público, `fetchAllProductos` se optimizó en chunks de 6 páginas con detección de fin de catálogo.
 44. **Streaming en Chunks de 300 Items y Purgado de Memoria (Garantía RAM < 50MB contra OOM en Render)**: el procesamiento de 25.000 productos acumulaba objetos ORM en la sesión de SQLAlchemy, superando los 512MB de RAM del plan gratuito de Render (`Ran out of memory`). **Fix:** en `scraper_tasks.py` se implementó inserción en flujo por lotes de 300 items con `db.expunge_all()` y `gc.collect()` tras cada lote, manteniendo el uso de RAM constante por debajo de 50MB durante toda la ejecución.
+45. **Deduplicación Intra-Chunk y Resiliencia en Inserción por Lotes**: si un lote de 300 items contenía SKUs duplicados, PostgreSQL disparaba `UniqueViolation` en `uq_productos_comercio_sku`, abortando la inserción de los lotes restantes y dejando solo los primeros 300 productos. **Fix:** en `scraper_tasks.py` se deduplican los SKUs dentro del propio lote (`seen_chunk_skus`) antes de consultar o insertar, se añade control transaccional por chunk con `try/except` que aísla fallos de lote individual sin cancelar el resto, y en `seed.py` se verifica `precios_count >= 1000` para garantizar que sucursales incompletas completen los 16.165 productos.
 
 ## Frontend Admin (Next.js) — `frontend-admin/`
 
 - Next.js 14 App Router, TypeScript, Tailwind CSS. Build `output: 'standalone'`, Docker multistage `node:20-alpine`.
 - Scripts: `npm run dev` (puerto 3000), `build`, `start`, `lint`.
 - Paleta Tailwind custom: `anonima.red #D91F26`, `darkred #B01319`, `navy #0F172A`, `border #E2E8F0`.
-- `src/lib/api.ts`: `API_BASE_URL` (usa `NEXT_PUBLIC_API_URL` en cliente / `INTERNAL_API_URL` en servidor). Funciones: `fetchJobs`, `fetchSucursales` (filtra por `comercio_id`), `fetchComercios`, `triggerScraper(comercio, sucursal, limit)`, `fetchProductosAdmin` (recorre todas las páginas de 500 del catálogo, opcionalmente por comercio).
 - Páginas (`src/app/`):
   - `/` — Dashboard: métricas (**Comercios Activos**, sucursales, productos, items extraídos, tareas en ejecución), formulario para lanzar scraper **por comercio + sucursal**, tabla de últimos 8 jobs con **columna Comercio**. Auto-refresh cada 5s.
   - `/jobs` — Historial/auditoría completa de scraper jobs (estados con badges). Auto-refresh cada 4s.
@@ -181,30 +181,45 @@ Se generalizó el sistema de "La Anónima por sucursal" a un **monitor multi-mer
 
 ## Frontend Public (Astro) — `frontend-public/`
 
-- Astro 4 con SSR (`output: 'server'`, adapter node standalone), React islands (`@astrojs/react`) y Tailwind. Docker multistage `node:20-alpine`, corre `dist/server/entry.mjs`.
+- Astro 4 configurado para compilación estática e islas React (`@astrojs/react`) y Tailwind CSS. Compatible tanto con Vercel como con preview local en Docker (`npx astro preview`).
 - Scripts: `npm run dev` / `start` / `build` / `preview` (puerto 4321).
-- Paleta Tailwind: extiende la del admin con `gray #F8FAFC` y `yellow #FFB800`.
-- `src/lib/api.ts`: `API_BASE_URL` con `PUBLIC_API_URL` / `INTERNAL_API_URL`. Funciones: `fetchComercios`, `fetchSucursales` (por `comercio_id`), `fetchProductos` (search, marca, min/max price, sucursal, categoria, comercio_id, page/limit), `fetchAllProductos` (páginas de 500 en paralelo, máx 25.000 items), `fetchCategorias` (por comercio), `fetchSuggestions` y `fetchComparar`.
-- `src/pages/index.astro` → `ProductCatalogApp.jsx` (island `client:load`).
-- Componentes:
-  - `Header.jsx` — barra superior roja con **selector de Comercio** (nombre + tipo) y selector de sucursal, y link al panel admin.
-  - `ProductCatalogApp.jsx` — estado central: comercios cargados (default La Anónima), sucursales recargadas al cambiar de comercio (con reseteo de filtros y guard `branchSeqRef`), **buscador grande por nombre** (debounce de 300ms y guard de secuencia `searchSeqRef`), **autocompletado** con sugerencias (debounce 250ms, cierre con click fuera/Escape, al seleccionar rellena el buscador y limpia la categoría), **modal de categorías a pantalla completa** con header blur, buscador y grilla responsiva, filtro "Solo Ofertas" (el estado vacío explica si no hay ofertas que coincidan), filtro por categoría (dropdown con `fetchCategorias` del comercio activo), **lazy load** (renderiza 60 y botón "Cargar más", contador "Mostrando X de Y"). **Sin filtro de precio** (se eliminó "Precio Máximo $" en el fix #17). **Lista de compras** con chat flotante (estado `shoppingList` persistido en `localStorage` key `ofertas-sur-list`, handlers `addToList`/`removeFromList`/`clearList`, `chatOpen` para minimizar/maximizar).
-  - `ProductCard.jsx` — tarjeta con badge de comercio/sucursal, imagen, precios, estado de stock, categoría, **caja de precio por bulto** (ámbar) en mayoristas cuando existe (**sin badge de descuento %**: el porcentaje solo se ve en el `ProductDetailModal`), y botón **"🛒 Agregar a la lista"** (verde, debajo de "Ver detalles"; cambia a **"✓ En la lista"** si ya está agregado).
-  - `ShoppingListChat.jsx` — ventana flotante tipo chat (`fixed bottom-4 right-4 z-40`) con dos estados: **minimizado** (botón circular rojo con ícono 🛒 + badge de cantidad + total acumulado) y **maximizado** (header con título "🛒 Mi Lista" + botones minimizar/vaciar, cuerpo con scroll de "burbujas" estilo chat — cada item muestra título, marca, precio y botón ✕ para quitar —, footer sticky con total acumulado y botón **"📋 Copiar lista"** al portapapeles).
-- `src/layouts/Layout.astro` y `src/styles/global.css` (Tailwind + estilos base).
+- Paleta Tailwind: `anonima.red #D91F26`, `darkred #B01319`, `navy #0F172A`, `border #E2E8F0`, `gray #F8FAFC`, `yellow #FFB800`.
+- `src/lib/api.ts`: `API_BASE_URL` sanitizado con `.trim().replace(/\/+$/, '')` (usa `PUBLIC_API_URL` / `NEXT_PUBLIC_API_URL` / `INTERNAL_API_URL`). Funciones: `fetchComercios`, `fetchSucursales` (por `comercio_id`), `fetchProductos` (search, marca, min/max price, sucursal, categoria, comercio_id, page/limit), `fetchAllProductos` (páginas de 500 en batches de 6 con detección de fin de catálogo, máx 25.000 items), `fetchCategorias` (por comercio), `fetchSuggestions` y `fetchCompararPorProducto`.
+- Páginas públicas:
+  - `/` (`src/pages/index.astro`) → Catálogo principal con `ProductCatalogApp.jsx` (island `client:load`).
+  - `/sucursales` (`src/pages/sucursales.astro`) → Directorio interactivo de sucursales con filtros por localidad y comercio (`SucursalesDirectory.jsx`).
+  - `/sobre-nosotros` (`src/pages/sobre-nosotros.astro`) → Presentación institucional enfocada en el impacto social en la Patagonia y nota del creador sin jerga técnica.
+  - `/privacidad` (`src/pages/privacidad.astro`) y `/terminos` (`src/pages/terminos.astro`) → Políticas legales, ley 25.326 y contacto oficial `contacto@superofertasur.com.ar`.
+  - `/404` (`src/pages/404.astro`) → Página de error 404 personalizada con estilo frosted glass.
+- Componentes clave:
+  - `Header.jsx` y `StaticNav.astro` — barra superior con efecto frosted glass (`backdrop-blur-md bg-white/90`), píldoras de navegación destacadas (🛒 Catálogo, 📍 Sucursales, 💡 Sobre Nosotros), selectores de Comercio y Sucursal. Sin enlace al panel admin.
+  - `ProductCatalogApp.jsx` — estado central del catálogo: comercio activo (default La Anónima), buscador grande con debounce de 300ms y guards de secuencia, autocompletado inteligente con dropdown, modal de categorías a pantalla completa con buscador y header blur, filtro "Solo Ofertas", "Solo Bulto" y "Oferta Semanal" para Yaguar. Lazy loading progresivo (60 iniciales y botón "Cargar más").
+  - `ProductCard.jsx` — tarjeta de producto con badge de comercio/sucursal, foto, precio de lista tachado y de oferta, badge de oferta semanal Yaguar, caja de precio por bulto, y botón **"🛒 Agregar a la lista"** / **"✓ En la lista"**.
+  - `ShoppingListChat.jsx` — widget flotante de lista de compras estilo chat (`fixed bottom-4 right-4 z-40`), minimizado por defecto con badge de cantidad y total acumulado, expandible con desglose de items y botón "📋 Copiar lista". Persistido en `localStorage` (`ofertas-sur-list`).
+  - `CookieConsentBanner.jsx` — banner flotante glassmorphism de consentimiento y términos en `Layout.astro`, persistido en `localStorage` (`ofertas-sur-consent`).
+  - `Footer.astro` — pie de página de 3 columnas (Exploración, Legal, Contacto) sin jerga técnica.
+
+## Arquitectura de Despliegue en la Nube (100% Gratuito)
+
+- **PostgreSQL**: Neon Serverless Postgres 16 (Ohio, AWS `us-east-2`). Conexión directa mediante `DATABASE_URL.replace("-pooler.", ".")` para evitar desconexiones de PgBouncer.
+- **Redis Broker / Cache**: Upstash Redis con conexión TCP SSL (`rediss://`).
+- **Backend API**: Render Web Service (FastAPI + Uvicorn) en Python 3.11 con `start_database()` en hilo background daemon, batch upsert en streaming de 300 items y purgado de RAM (`gc.collect()`).
+- **Frontend Público**: Vercel (Astro SSR estático + React Islands) con `PUBLIC_API_URL` apuntando al backend en Render.
+- **Frontend Admin**: Vercel (Next.js 14 App Router) con `NEXT_PUBLIC_API_URL`.
 
 ## Comandos útiles
 
-- Levantar todo: `./start_project.sh` (equivale a `docker compose up --build -d`).
-- Ver logs: `docker compose logs -f backend` (o `celery_worker`, `frontend_public`, `frontend_admin`).
-- Detener: `docker compose down` (agregar `-v` para borrar el volumen `postgres_data`).
-- Probar la API: `curl http://localhost:8000/api/v1/comercios`, `curl http://localhost:8000/api/v1/sucursales`, `curl -X POST http://localhost:8000/api/v1/scraper/trigger -H "Content-Type: application/json" -d '{"comercio":"carrefour","sucursal":"Carrefour Trelew","limite_productos":20}'`.
+- Levantar todo en local: `./start_project.sh` (equivale a `docker compose up --build -d`).
+- Ver logs en local: `docker compose logs -f backend` (o `celery_worker`, `frontend_public`, `frontend_admin`).
+- Detener en local: `docker compose down` (agregar `-v` para borrar el volumen `postgres_data`).
+- Probar la API: `curl http://localhost:8000/api/v1/comercios`, `curl http://localhost:8000/api/v1/sucursales`, `curl https://super-oferta-sur.onrender.com/health`.
 
 ## Convenciones y notas
 
 - Todo el idioma de la UI, comentarios y nombres de tablas/endpoints está en español; los nombres de archivo/código en inglés.
 - Cada producto trae `categoria` (ruta real del sitio, ej. "Almacén > Aceite, Aderezos y Condimentos > Aceite") aunque la clasificación principal es por comercio, SKU y sucursal.
 - El catálogo completo de La Anónima (16.165 productos) vive en `backend/app/scraper/catalogo.py` y se regenera desde el JSON del harvest (`harvest_full.py`); el live scraping recorre 38 categorías representativas y el fallback usa ese catálogo.
+- Las cadenas VTEX (Carrefour, Jumbo, Vea, Mas Online) extraen más de 25.000 productos recorriendo todos los departamentos de la plataforma.
 - El `total_scrapeados` del job cuenta items procesados. Con el dedup por SKU activado (fix #14) coincide exactamente con los productos únicos (16.165).
 - Sin tests automatizados y sin migraciones Alembic en uso: las tablas se crean con `Base.metadata.create_all` (en `main.py` y `seed.py`). **Importante:** al agregar columnas/tablas nuevas (como la extensión multi-mercado) hay que recrear la DB con `docker compose down -v && docker compose up --build -d`. Alembic está en `requirements.txt` pero no configurado.
 - Los precios de oferta se extraen reales del sitio (`.precio.plus` + `.tachado`) en el scraping en vivo; en el fallback se calculan con el descuento sobre el precio base.
