@@ -188,15 +188,30 @@ export async function fetchAllProductos(params: {
   bulto_cerrado?: boolean;
   oferta_semanal?: boolean;
 }, maxItems: number = 25000): Promise<Producto[]> {
-  // Páginas en PARALELO (Promise.all) para no esperar roundtrips secuenciales.
-  // Se piden hasta ceil(maxItems/PAGE_SIZE) páginas; las que no existen devuelven [].
+  const allProducts: Producto[] = [];
   const maxPages = Math.ceil(maxItems / PAGE_SIZE);
-  const batches = await Promise.all(
-    Array.from({ length: maxPages }, (_, i) =>
-      fetchProductos({ ...params, page: i + 1, limit: PAGE_SIZE })
-    )
-  );
-  return batches.flat().slice(0, maxItems);
+
+  for (let startPage = 1; startPage <= maxPages; startPage += 6) {
+    const pageNumbers = Array.from({ length: Math.min(6, maxPages - startPage + 1) }, (_, i) => startPage + i);
+    const results = await Promise.all(
+      pageNumbers.map(page => fetchProductos({ ...params, page, limit: PAGE_SIZE }))
+    );
+    let reachedEnd = false;
+    for (const batch of results) {
+      if (!batch || batch.length === 0) {
+        reachedEnd = true;
+        continue;
+      }
+      allProducts.push(...batch);
+      if (batch.length < PAGE_SIZE) {
+        reachedEnd = true;
+      }
+    }
+    if (reachedEnd || allProducts.length >= maxItems) {
+      break;
+    }
+  }
+  return allProducts.slice(0, maxItems);
 }
 
 export async function fetchCategorias(comercio_id?: number): Promise<string[]> {

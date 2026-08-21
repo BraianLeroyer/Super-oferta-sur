@@ -9,12 +9,33 @@ from app.scraper.anti_blocking import random_delay_async
 logger = logging.getLogger(__name__)
 
 
+DEPARTAMENTOS_VTEX = [
+    "",  # Catálogo general
+    "almacen",
+    "bebidas",
+    "lacteos-y-productos-frescos",
+    "limpieza",
+    "perfumeria",
+    "electro-y-tecnologia",
+    "hogar",
+    "textil",
+    "deportes-y-tiempo-libre",
+    "jugueteria",
+    "mascotas",
+    "bebes",
+    "congelados",
+    "frutas-y-verduras",
+    "carnes-y-pescados",
+    "panaderia",
+    "ferreteria-y-jardin",
+]
+
+
 class VtexScraper(BaseScraper):
     """Scraper genérico para cadenas sobre plataforma VTEX (Carrefour, Jumbo, Vea, Mas Online).
 
-    Fase 1: API clásica /api/catalog_system/pub/products/search/ (paginación secuencial, ~2500 max).
-    Fase 2: API inteligente /api/io/_v/api/intelligent-search/product_search/ (búsqueda por marca,
-             encuentra productos fuera del top 2500 por defecto).
+    Fase 1: API clásica por departamentos /api/catalog_system/pub/products/search/{dep} (hasta 25.000+ productos).
+    Fase 2: API inteligente /api/io/_v/api/intelligent-search/product_search/ (búsqueda por marcas).
     """
 
     API_PATH = "/api/catalog_system/pub/products/search"
@@ -100,68 +121,55 @@ class VtexScraper(BaseScraper):
             precio_lista = 50000.0
             precio_oferta = 25000.0
 
-        images = unit_item.get("images") or []
-        imagen = images[0].get("imageUrl") if images else None
-
+        sku = (unit_item.get("itemId") or "").strip() or str(raw.get("productId") or "").strip()
+        nombre = (raw.get("productName") or "").strip()
+        marca = (raw.get("brand") or "").strip()
         categoria = self._parse_categorias(raw.get("categories") or [])
-        titulo = raw.get("productName") or raw.get("productTitle") or ""
-        marca = raw.get("brand") or ""
-        ref = raw.get("productReference") or raw.get("productId") or str(raw.get("id") or "")
-        sku = str(ref).strip()
-        link = raw.get("linkText") or ""
-        url_producto = f"{self.base_url}/{link}/p" if link else self.base_url
-        unit = unit_item.get("measurementUnit") or "un"
+        img = unit_item.get("images", [{}])[0].get("imageUrl")
+        link = raw.get("link") or (f"{self.base_url}/{raw.get('linkText')}/p" if raw.get('linkText') else self.base_url)
 
         precio_bulto = None
         descripcion_bulto = None
         if bulk_item:
-            bulk_offer = self._get_offer(bulk_item)
-            bprice = self._parse_price(bulk_offer.get("Price"))
-            mult = int(float(bulk_item.get("unitMultiplier", 1) or 1))
-            if bprice is not None and bprice > 0:
-                precio_bulto = round(bprice, 2)
-                descripcion_bulto = f"Bulto x{mult}"
+            b_offer = self._get_offer(bulk_item)
+            b_price = self._parse_price(b_offer.get("Price"))
+            b_mult = float(bulk_item.get("unitMultiplier", 1) or 1)
+            if b_price and b_price > 0 and b_mult > 1:
+                precio_bulto = round(b_price, 2)
+                descripcion_bulto = f"Bulto x{int(b_mult)}"
 
-        descripcion = (f"{titulo} de la marca {marca}. Disponible en {self.comercio['nombre']}."
+        descripcion = (f"{nombre} de la marca {marca}. Disponible en {self.comercio['nombre']}."
                        + (f" Categoría {categoria}." if categoria else ""))
 
         return {
             "sku": sku,
-            "titulo": titulo,
+            "titulo": nombre,
             "marca": marca,
             "descripcion": descripcion,
-            "imagen_url": imagen,
-            "unidad_medida": unit,
-            "url_producto": url_producto,
+            "imagen_url": img,
+            "unidad_medida": unit_item.get("measurementUnit", "un"),
+            "url_producto": link,
             "categoria": categoria,
-            "precio_lista": round(precio_lista, 2) if precio_lista is not None else 0.0,
-            "precio_oferta": round(precio_oferta, 2) if precio_oferta is not None else None,
+            "precio_lista": round(precio_lista, 2),
+            "precio_oferta": round(precio_oferta, 2) if precio_oferta else None,
             "es_oferta_club": False,
-            "disponible": bool(offer.get("IsAvailable", True)),
+            "disponible": bool(offer.get("AvailableQuantity", 1) > 0),
             "precio_bulto": precio_bulto,
             "descripcion_bulto": descripcion_bulto,
         }
 
-    async def _intelligent_search(self, query: str, max_pages: int = None, seen: Optional[Set[str]] = None) -> List[Dict[str, Any]]:
-        """Busca productos vía la API inteligente de VTEX por texto (marca, producto, etc).
-        Si se pasa `seen`, detiene la paginación cuando una página completa no aporta SKUs nuevos."""
-        max_pages = max_pages or self.IS_MAX_PAGES
-        productos = []
+    async def _intelligent_search(self, query: str, max_pages: int = 10, seen: Optional[Set[str]] = None) -> List[Dict[str, Any]]:
+        productos: List[Dict[str, Any]] = []
         consecutive_empty = 0
         for page in range(1, max_pages + 1):
-            params = urllib.parse.urlencode({
-                "query": query,
-                "locale": "es-AR",
-                "count": self.PAGE_SIZE,
-                "page": page,
-            })
-            url = f"{self.base_url}{self.IS_API_PATH}/?{params}"
+            q_enc = urllib.parse.quote(query)
+            url = f"{self.base_url}{self.IS_API_PATH}/?query={q_enc}&locale=es-AR&count={self.PAGE_SIZE}&page={page}"
             try:
                 await random_delay_async(0.2, 0.5)
                 async with self._new_client() as client:
-                    resp = await client.get(url, headers={"Accept": "application/json"})
+                    resp = await client.get(url)
                 if resp.status_code in (403, 429):
-                    logger.warning(f"[VTEX IS {self.comercio['nombre']}] bloqueo ({resp.status_code}) query='{query}' page={page}")
+                    logger.warning(f"[VTEX IS {self.comercio['nombre']}] bloqueo ({resp.status_code}) en query='{query}' page={page}")
                     break
                 if resp.status_code != 200:
                     break
@@ -192,49 +200,63 @@ class VtexScraper(BaseScraper):
     async def run_extraction(self, limit: int = 100,
                              brands_to_search: Optional[List[str]] = None,
                              precio_maximo: Optional[float] = None) -> List[Dict[str, Any]]:
-        """Extrae productos de la cadena VTEX.
+        """Extrae productos de la cadena VTEX recorriendo todos los departamentos.
 
-        Fase 1: Catálogo paginado (API clásica).
+        Fase 1: Catálogo multi-departamento (hasta 25.000+ productos).
         Fase 2 (opcional): Búsqueda por marcas vía API inteligente.
         Filtra por precio_maximo si se indica.
         """
         seen: Set[str] = set()
         productos: List[Dict[str, Any]] = []
 
-        # --- FASE 1: Catálogo clásico ---
-        _from = 0
+        # --- FASE 1: Catálogo multi-departamento ---
         max_total = self.MAX_TOTAL if limit is None else min(limit, self.MAX_TOTAL)
 
-        while len(productos) < max_total:
-            _to = _from + self.PAGE_SIZE - 1
-            url = f"{self.base_url}{self.API_PATH}/?_from={_from}&_to={_to}"
-            try:
-                await random_delay_async(0.3, 0.8)
-                async with self._new_client() as client:
-                    resp = await client.get(url, headers={"Accept": "application/json"})
-                if resp.status_code in (403, 429):
-                    logger.warning(f"[VTEX {self.comercio['nombre']}] bloqueo ({resp.status_code}) en _from={_from}")
-                    break
-                if resp.status_code not in (200, 206):
-                    logger.warning(f"[VTEX {self.comercio['nombre']}] status {resp.status_code} en _from={_from}")
-                    break
-                data = resp.json()
-                if not data:
-                    break
-                for raw in data:
-                    norm = self._normalize(raw)
-                    if norm is None or norm["sku"] in seen:
-                        continue
-                    seen.add(norm["sku"])
-                    productos.append(norm)
-                if len(data) < self.PAGE_SIZE:
-                    break
-                _from += self.PAGE_SIZE
-            except Exception as e:
-                logger.warning(f"[VTEX {self.comercio['nombre']}] error en _from={_from}: {e}")
+        for dep in DEPARTAMENTOS_VTEX:
+            if len(productos) >= max_total:
                 break
+            _from = 0
+            dep_path = f"/{dep}" if dep else ""
+            consecutive_empty = 0
 
-        logger.info(f"[VTEX {self.comercio['nombre']}] Fase 1: {len(productos)} productos del catálogo clásico.")
+            while len(productos) < max_total:
+                _to = _from + self.PAGE_SIZE - 1
+                url = f"{self.base_url}{self.API_PATH}{dep_path}?_from={_from}&_to={_to}"
+                try:
+                    await random_delay_async(0.2, 0.4)
+                    async with self._new_client() as client:
+                        resp = await client.get(url, headers={"Accept": "application/json"})
+                    if resp.status_code in (403, 429):
+                        logger.warning(f"[VTEX {self.comercio['nombre']}] bloqueo ({resp.status_code}) en {dep} _from={_from}")
+                        break
+                    if resp.status_code not in (200, 206):
+                        break
+                    data = resp.json()
+                    if not data:
+                        break
+                    new_items = 0
+                    for raw in data:
+                        norm = self._normalize(raw)
+                        if norm is None or norm["sku"] in seen:
+                            continue
+                        seen.add(norm["sku"])
+                        productos.append(norm)
+                        new_items += 1
+
+                    if len(data) < self.PAGE_SIZE:
+                        break
+                    if new_items == 0:
+                        consecutive_empty += 1
+                        if consecutive_empty >= 2:
+                            break
+                    else:
+                        consecutive_empty = 0
+                    _from += self.PAGE_SIZE
+                except Exception as e:
+                    logger.warning(f"[VTEX {self.comercio['nombre']}] error en {dep} _from={_from}: {e}")
+                    break
+
+        logger.info(f"[VTEX {self.comercio['nombre']}] Fase 1: {len(productos)} productos de todos los departamentos.")
 
         # --- FASE 2: Búsqueda por marcas vía API inteligente ---
         if brands_to_search:

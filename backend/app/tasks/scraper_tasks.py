@@ -157,71 +157,79 @@ def run_scraper_job_task(job_id_str: str, comercio_query: str, sucursal_query: s
         comercio = db.query(Comercio).filter(Comercio.id == job.comercio_id).first()
         sucursal = db.query(Sucursal).filter(Sucursal.id == job.sucursal_id).first()
 
-        # 1. Cargar todos los productos existentes del comercio en un solo SELECT rápido
-        existing_products = {
-            p.sku: p
-            for p in db.query(Producto).filter(Producto.comercio_id == comercio.id).all()
-        }
+        import gc
 
-        # 2. Identificar y crear productos nuevos en lote
-        now_dt = datetime.utcnow()
-        new_products = []
-        for item in extracted_items:
-            sku = item["sku"]
-            if sku not in existing_products:
-                prod = Producto(
-                    comercio_id=comercio.id,
-                    sku=sku,
-                    titulo=item["titulo"],
-                    marca=item.get("marca"),
-                    descripcion=item.get("descripcion"),
-                    imagen_url=item.get("imagen_url"),
-                    unidad_medida=item.get("unidad_medida"),
-                    url_producto=item.get("url_producto"),
-                    categoria=item.get("categoria"),
-                    creado_en=now_dt,
-                    actualizado_en=now_dt
-                )
-                new_products.append(prod)
-                existing_products[sku] = prod
-
-        if new_products:
-            db.add_all(new_products)
-            db.flush()
-
-        # 3. Preparar e insertar registros de PrecioHistorial en bloques ultra rápidos
-        precios_hist_batch = []
-        for item in extracted_items:
-            prod = existing_products.get(item["sku"])
-            if not prod or not prod.id:
-                continue
-
-            if item.get("titulo") and item["titulo"] != prod.titulo:
-                prod.titulo = item["titulo"]
-            if item.get("categoria") and not prod.categoria:
-                prod.categoria = item["categoria"]
-
-            precios_hist_batch.append(PrecioHistorial(
-                producto_id=prod.id,
-                sucursal_id=sucursal.id,
-                precio_lista=item["precio_lista"],
-                precio_oferta=item.get("precio_oferta"),
-                precio_bulto=item.get("precio_bulto"),
-                descripcion_bulto=item.get("descripcion_bulto"),
-                es_oferta_club=item.get("es_oferta_club", False),
-                disponible=item.get("disponible", True),
-                fecha_captura=now_dt
-            ))
-
-        # Insertar precios en bloques de 500 para máximo rendimiento
-        CHUNK_SIZE = 500
-        for i in range(0, len(precios_hist_batch), CHUNK_SIZE):
-            chunk = precios_hist_batch[i:i + CHUNK_SIZE]
-            db.add_all(chunk)
-            db.commit()
-
-        total_scraped = len(precios_hist_batch)
+        total_scraped = 0
         total_errors = 0
+        CHUNK_SIZE = 300
+        now_dt = datetime.utcnow()
+
+        # Inserción en flujo por lotes de 300 items para mantener el uso de RAM por debajo de 50MB
+        for chunk_idx in range(0, len(extracted_items), CHUNK_SIZE):
+            chunk = extracted_items[chunk_idx : chunk_idx + CHUNK_SIZE]
+            chunk_skus = [it["sku"] for it in chunk]
+
+            # 1. Traer solo los IDs y SKUs de este chunk específico (ocupa < 20KB de RAM)
+            existing_chunk = {
+                row[0]: row[1]
+                for row in db.query(Producto.sku, Producto.id).filter(
+                    Producto.comercio_id == comercio.id,
+                    Producto.sku.in_(chunk_skus)
+                ).all()
+            }
+
+            # 2. Crear productos nuevos si no existen en este chunk
+            new_prods = []
+            for item in chunk:
+                sku = item["sku"]
+                if sku not in existing_chunk:
+                    prod = Producto(
+                        comercio_id=comercio.id,
+                        sku=sku,
+                        titulo=item["titulo"],
+                        marca=item.get("marca"),
+                        descripcion=item.get("descripcion"),
+                        imagen_url=item.get("imagen_url"),
+                        unidad_medida=item.get("unidad_medida"),
+                        url_producto=item.get("url_producto"),
+                        categoria=item.get("categoria"),
+                        creado_en=now_dt,
+                        actualizado_en=now_dt
+                    )
+                    new_prods.append(prod)
+
+            if new_prods:
+                db.add_all(new_prods)
+                db.flush()
+                for p in new_prods:
+                    existing_chunk[p.sku] = p.id
+
+            # 3. Crear registros de precios para este chunk
+            prices = []
+            for item in chunk:
+                p_id = existing_chunk.get(item["sku"])
+                if not p_id:
+                    continue
+                prices.append(PrecioHistorial(
+                    producto_id=p_id,
+                    sucursal_id=sucursal.id,
+                    precio_lista=item["precio_lista"],
+                    precio_oferta=item.get("precio_oferta"),
+                    precio_bulto=item.get("precio_bulto"),
+                    descripcion_bulto=item.get("descripcion_bulto"),
+                    es_oferta_club=item.get("es_oferta_club", False),
+                    disponible=item.get("disponible", True),
+                    fecha_captura=now_dt
+                ))
+
+            if prices:
+                db.add_all(prices)
+                db.commit()
+                total_scraped += len(prices)
+
+            # Purgar el mapa de identidad de SQLAlchemy y forzar recolección de basura
+            db.expunge_all()
+            gc.collect()
 
         job.estado = "FINISHED"
         job.total_scrapeados = total_scraped
