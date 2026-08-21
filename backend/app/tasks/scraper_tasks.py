@@ -157,67 +157,71 @@ def run_scraper_job_task(job_id_str: str, comercio_query: str, sucursal_query: s
         comercio = db.query(Comercio).filter(Comercio.id == job.comercio_id).first()
         sucursal = db.query(Sucursal).filter(Sucursal.id == job.sucursal_id).first()
 
-        total_scraped = 0
-        total_errors = 0
-        commit_every = 200
+        # 1. Cargar todos los productos existentes del comercio en un solo SELECT rápido
+        existing_products = {
+            p.sku: p
+            for p in db.query(Producto).filter(Producto.comercio_id == comercio.id).all()
+        }
 
+        # 2. Identificar y crear productos nuevos en lote
+        now_dt = datetime.utcnow()
+        new_products = []
         for item in extracted_items:
-            try:
-                # Upsert de Producto por (comercio_id, SKU)
-                producto = db.query(Producto).filter(
-                    Producto.comercio_id == comercio.id,
-                    Producto.sku == item["sku"],
-                ).first()
-                if not producto:
-                    producto = Producto(
-                        comercio_id=comercio.id,
-                        sku=item["sku"],
-                        titulo=item["titulo"],
-                        marca=item.get("marca"),
-                        descripcion=item.get("descripcion"),
-                        imagen_url=item.get("imagen_url"),
-                        unidad_medida=item.get("unidad_medida"),
-                        url_producto=item.get("url_producto"),
-                        categoria=item.get("categoria")
-                    )
-                    db.add(producto)
-                    db.flush()
-                else:
-                    # Actualizar info si cambió
-                    producto.titulo = item["titulo"]
-                    if item.get("marca"):
-                        producto.marca = item.get("marca")
-                    if item.get("descripcion"):
-                        producto.descripcion = item.get("descripcion")
-                    if item.get("imagen_url"):
-                        producto.imagen_url = item.get("imagen_url")
-                    if item.get("url_producto"):
-                        producto.url_producto = item.get("url_producto")
-                    if item.get("categoria"):
-                        producto.categoria = item.get("categoria")
-
-                # Crear nuevo registro de historial de precio
-                precio_hist = PrecioHistorial(
-                    producto_id=producto.id,
-                    sucursal_id=sucursal.id,
-                    precio_lista=item["precio_lista"],
-                    precio_oferta=item.get("precio_oferta"),
-                    precio_bulto=item.get("precio_bulto"),
-                    descripcion_bulto=item.get("descripcion_bulto"),
-                    es_oferta_club=item.get("es_oferta_club", False),
-                    disponible=item.get("disponible", True),
-                    fecha_captura=datetime.utcnow()
+            sku = item["sku"]
+            if sku not in existing_products:
+                prod = Producto(
+                    comercio_id=comercio.id,
+                    sku=sku,
+                    titulo=item["titulo"],
+                    marca=item.get("marca"),
+                    descripcion=item.get("descripcion"),
+                    imagen_url=item.get("imagen_url"),
+                    unidad_medida=item.get("unidad_medida"),
+                    url_producto=item.get("url_producto"),
+                    categoria=item.get("categoria"),
+                    creado_en=now_dt,
+                    actualizado_en=now_dt
                 )
-                db.add(precio_hist)
+                new_products.append(prod)
+                existing_products[sku] = prod
 
-                total_scraped += 1
-                if total_scraped % commit_every == 0:
-                    db.commit()
-            except Exception as item_err:
-                db.rollback()
-                total_errors += 1
+        if new_products:
+            db.add_all(new_products)
+            db.flush()
 
-        db.commit()
+        # 3. Preparar e insertar registros de PrecioHistorial en bloques ultra rápidos
+        precios_hist_batch = []
+        for item in extracted_items:
+            prod = existing_products.get(item["sku"])
+            if not prod or not prod.id:
+                continue
+
+            if item.get("titulo") and item["titulo"] != prod.titulo:
+                prod.titulo = item["titulo"]
+            if item.get("categoria") and not prod.categoria:
+                prod.categoria = item["categoria"]
+
+            precios_hist_batch.append(PrecioHistorial(
+                producto_id=prod.id,
+                sucursal_id=sucursal.id,
+                precio_lista=item["precio_lista"],
+                precio_oferta=item.get("precio_oferta"),
+                precio_bulto=item.get("precio_bulto"),
+                descripcion_bulto=item.get("descripcion_bulto"),
+                es_oferta_club=item.get("es_oferta_club", False),
+                disponible=item.get("disponible", True),
+                fecha_captura=now_dt
+            ))
+
+        # Insertar precios en bloques de 500 para máximo rendimiento
+        CHUNK_SIZE = 500
+        for i in range(0, len(precios_hist_batch), CHUNK_SIZE):
+            chunk = precios_hist_batch[i:i + CHUNK_SIZE]
+            db.add_all(chunk)
+            db.commit()
+
+        total_scraped = len(precios_hist_batch)
+        total_errors = 0
 
         job.estado = "FINISHED"
         job.total_scrapeados = total_scraped
