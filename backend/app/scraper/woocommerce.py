@@ -155,7 +155,7 @@ class WooCommerceScraper(BaseScraper):
             "descripcion_bulto": descripcion_bulto,
         }
 
-    async def run_extraction(self, limit: int = 100) -> List[Dict[str, Any]]:
+    async def run_extraction(self, limit: int = 100, *args, **kwargs) -> List[Dict[str, Any]]:
         productos: List[Dict[str, Any]] = []
         seen: set = set()
         page = 1

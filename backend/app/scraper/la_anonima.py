@@ -191,7 +191,7 @@ class LaAnonimaScraper:
                 break
         return products
 
-    async def run_extraction(self, limit: int = 20) -> List[Dict[str, Any]]:
+    async def run_extraction(self, limit: int = 20, *args, **kwargs) -> List[Dict[str, Any]]:
         """
         Extrae productos reales del catálogo de La Anónima por sucursal.
         Prioriza scraping en vivo de categorías reales; si falla o no llega al

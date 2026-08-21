@@ -20,21 +20,30 @@ from app.scraper.comercios_data import get_sucursal_config
 
 def _run_extraction_coro(scraper, limit, brands_to_search=None, precio_maximo=None):
     """Ejecuta la extracción async en un event loop propio dentro de un thread."""
+    import inspect
     result = {}
+    exc = []
 
     def runner():
-        result["items"] = asyncio.run(
-            scraper.run_extraction(
-                limit=limit,
-                brands_to_search=brands_to_search,
-                precio_maximo=precio_maximo,
-            )
-        )
+        try:
+            sig = inspect.signature(scraper.run_extraction)
+            kwargs = {"limit": limit}
+            if "brands_to_search" in sig.parameters:
+                kwargs["brands_to_search"] = brands_to_search
+            if "precio_maximo" in sig.parameters:
+                kwargs["precio_maximo"] = precio_maximo
+
+            result["items"] = asyncio.run(scraper.run_extraction(**kwargs))
+        except Exception as e:
+            exc.append(e)
 
     t = threading.Thread(target=runner, daemon=True)
     t.start()
     t.join()
-    return result["items"]
+
+    if exc:
+        raise exc[0]
+    return result.get("items", [])
 
 
 def _get_missing_brands(db: Session, comercio_slug: str) -> list:
@@ -62,9 +71,9 @@ def _get_missing_brands(db: Session, comercio_slug: str) -> list:
         other_brands.add(row[0])
 
     missing = sorted(other_brands - current_brands)
-    # Filtrar marcas basura (solo caracteres especiales, muy cortas, etc.)
-    missing = [b for b in missing if len(b) > 1 and any(c.isalpha() for c in b)]
-    logger.info(f"[VTEX {comercio_slug}] Marcas faltantes de otras cadenas: {len(missing)}")
+    # Filtrar marcas basura y tomar las principales 30 para siembra rapida
+    missing = [b for b in missing if len(b) > 1 and any(c.isalpha() for c in b)][:30]
+    logger.info(f"[VTEX {comercio_slug}] Marcas faltantes de otras cadenas a buscar: {len(missing)}")
     return missing
 
 @shared_task(name="run_scraper_job_task")
