@@ -5,10 +5,13 @@ from app.api import api_router
 from app.database import engine, Base
 from app.seed import seed_database
 
+api_prefix = settings.API_V1_STR.strip().rstrip("/")
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+    openapi_url=f"{api_prefix}/openapi.json",
+    docs_url="/docs"
 )
 
 # Configuración CORS amplia para portales Astro (4321) y Next.js (3000)
@@ -49,4 +52,4 @@ def root():
 def health():
     return {"status": "ok"}
 
-app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(api_router, prefix=api_prefix)

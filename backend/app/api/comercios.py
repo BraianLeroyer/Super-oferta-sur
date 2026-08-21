@@ -9,6 +9,7 @@ router = APIRouter(prefix="/comercios", tags=["Comercios"])
 
 
 @router.get("", response_model=List[ComercioOut])
+@router.get("/", response_model=List[ComercioOut], include_in_schema=False)
 def get_comercios(db: Session = Depends(get_db)):
     """
     GET /api/v1/comercios

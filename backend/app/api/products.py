@@ -109,6 +109,7 @@ def _resolve_sucursal_id(db: Session, sucursal_id: Optional[int], sucursal: Opti
 
 
 @router.get("", response_model=List[ProductoOut])
+@router.get("/", response_model=List[ProductoOut], include_in_schema=False)
 def get_products(
     search: Optional[str] = None,
     marca: Optional[str] = None,

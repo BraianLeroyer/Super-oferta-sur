@@ -10,6 +10,7 @@ router = APIRouter(prefix="/sucursales", tags=["Sucursales"])
 
 
 @router.get("", response_model=List[SucursalOut])
+@router.get("/", response_model=List[SucursalOut], include_in_schema=False)
 def get_sucursales(
     comercio_id: Optional[int] = None,
     comercio: Optional[str] = None,
