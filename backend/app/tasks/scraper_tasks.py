@@ -151,6 +151,10 @@ def run_scraper_job_task(job_id_str: str, comercio_query: str, sucursal_query: s
         comercio = db.query(Comercio).filter(Comercio.id == job.comercio_id).first()
         sucursal = db.query(Sucursal).filter(Sucursal.id == job.sucursal_id).first()
 
+        comercio_id = int(comercio.id)
+        sucursal_id = int(sucursal.id)
+        comercio_slug = str(comercio.slug)
+
         import gc
 
         total_scraped = 0
@@ -175,23 +179,24 @@ def run_scraper_job_task(job_id_str: str, comercio_query: str, sucursal_query: s
             if not chunk_skus:
                 continue
 
+            new_prods = []
+            prices = []
             try:
                 # 1. Traer solo los IDs y SKUs de este chunk específico
                 existing_chunk = {
                     row[0]: row[1]
                     for row in db.query(Producto.sku, Producto.id).filter(
-                        Producto.comercio_id == comercio.id,
+                        Producto.comercio_id == comercio_id,
                         Producto.sku.in_(chunk_skus)
                     ).all()
                 }
 
                 # 2. Crear productos nuevos si no existen en este chunk
-                new_prods = []
                 for item in chunk:
                     sku = str(item.get("sku") or "").strip()
                     if sku not in existing_chunk:
                         prod = Producto(
-                            comercio_id=comercio.id,
+                            comercio_id=comercio_id,
                             sku=sku,
                             titulo=item["titulo"],
                             marca=item.get("marca"),
@@ -213,7 +218,6 @@ def run_scraper_job_task(job_id_str: str, comercio_query: str, sucursal_query: s
                         existing_chunk[p.sku] = p.id
 
                 # 3. Crear registros de precios para este chunk
-                prices = []
                 for item in chunk:
                     sku = str(item.get("sku") or "").strip()
                     p_id = existing_chunk.get(sku)
@@ -221,7 +225,7 @@ def run_scraper_job_task(job_id_str: str, comercio_query: str, sucursal_query: s
                         continue
                     prices.append(PrecioHistorial(
                         producto_id=p_id,
-                        sucursal_id=sucursal.id,
+                        sucursal_id=sucursal_id,
                         precio_lista=item["precio_lista"],
                         precio_oferta=item.get("precio_oferta"),
                         precio_bulto=item.get("precio_bulto"),
@@ -239,18 +243,30 @@ def run_scraper_job_task(job_id_str: str, comercio_query: str, sucursal_query: s
             except Exception as chunk_err:
                 db.rollback()
                 total_errors += 1
-                logger.warning(f"Error procesando chunk {chunk_idx} en {comercio.slug}: {chunk_err}")
+                logger.warning(f"Error procesando chunk {chunk_idx} en {comercio_slug}: {chunk_err}")
 
             finally:
-                # Purgar el mapa de identidad de SQLAlchemy y forzar recolección de basura
-                db.expunge_all()
+                # Expulsar solo los objetos de productos/precios de este lote para liberar memoria RAM
+                for p in new_prods:
+                    try:
+                        db.expunge(p)
+                    except Exception:
+                        pass
+                for pr in prices:
+                    try:
+                        db.expunge(pr)
+                    except Exception:
+                        pass
                 gc.collect()
 
-        job.estado = "FINISHED"
-        job.total_scrapeados = total_scraped
-        job.total_errores = total_errors
-        job.finalizado_en = datetime.utcnow()
-        db.commit()
+        # Re-obtener job fresco para evitar DetachedInstanceError
+        fresh_job = db.query(ScraperJob).filter(ScraperJob.id == job_id).first()
+        if fresh_job:
+            fresh_job.estado = "FINISHED"
+            fresh_job.total_scrapeados = total_scraped
+            fresh_job.total_errores = total_errors
+            fresh_job.finalizado_en = datetime.utcnow()
+            db.commit()
 
         return {
             "job_id": job_id_str,
@@ -261,10 +277,12 @@ def run_scraper_job_task(job_id_str: str, comercio_query: str, sucursal_query: s
 
     except Exception as e:
         db.rollback()
-        job.estado = "FAILED"
-        job.mensaje_error = str(e)
-        job.finalizado_en = datetime.utcnow()
-        db.commit()
+        err_job = db.query(ScraperJob).filter(ScraperJob.id == job_id).first()
+        if err_job:
+            err_job.estado = "FAILED"
+            err_job.mensaje_error = str(e)
+            err_job.finalizado_en = datetime.utcnow()
+            db.commit()
         return {"job_id": job_id_str, "status": "FAILED", "error": str(e)}
     finally:
         db.close()
