@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine, Base
 from app.models import Comercio, Sucursal, Producto, PrecioHistorial, ScraperJob
@@ -17,7 +18,16 @@ def seed_database():
 
     db: Session = SessionLocal()
     try:
-        # 1. Crear Comercios y sus Sucursales por defecto
+        # 1. Limpiar sucursal Jumbo Trelew si existía previamente
+        jumbo_trelew_suc = db.query(Sucursal).filter(Sucursal.codigo_sucursal == "JUMBO_TRELEW").first()
+        if jumbo_trelew_suc:
+            logger.info("Eliminando sucursal obsoleta JUMBO_TRELEW...")
+            db.query(PrecioHistorial).filter(PrecioHistorial.sucursal_id == jumbo_trelew_suc.id).delete()
+            db.query(ScraperJob).filter(ScraperJob.sucursal_id == jumbo_trelew_suc.id).delete()
+            db.delete(jumbo_trelew_suc)
+            db.commit()
+
+        # 2. Crear Comercios y sus Sucursales por defecto
         for slug, data in COMERCIOS.items():
             comercio = db.query(Comercio).filter(Comercio.slug == slug).first()
             if not comercio:
@@ -50,39 +60,48 @@ def seed_database():
                     logger.info(f"Sucursal creada: {s['nombre']} ({s['codigo']})")
         db.commit()
 
-        # Extraer lista de sucursales para no mantener una sesión abierta durante las descargas de red
-        targets = []
-        for comercio in db.query(Comercio).order_by(Comercio.id).all():
-            for suc in comercio.sucursales:
-                targets.append({
-                    "comercio_id": comercio.id,
-                    "comercio_slug": comercio.slug,
-                    "comercio_nombre": comercio.nombre,
-                    "sucursal_id": suc.id,
-                    "sucursal_nombre": suc.nombre,
-                    "seed_limit": len(PRODUCTOS_CATALOGO_BASE) if comercio.slug == "la-anonima" else None
+        # 3. Agrupar sucursales por comercio para siembra ultra-rápida y completa
+        comercios_list = db.query(Comercio).order_by(Comercio.id).all()
+        comercios_data = []
+        for com in comercios_list:
+            suc_list = []
+            for suc in com.sucursales:
+                cnt = db.query(PrecioHistorial).filter(PrecioHistorial.sucursal_id == suc.id).count()
+                suc_list.append({
+                    "id": suc.id,
+                    "nombre": suc.nombre,
+                    "codigo": suc.codigo_sucursal,
+                    "precios_count": cnt
                 })
+            comercios_data.append({
+                "id": com.id,
+                "slug": com.slug,
+                "nombre": com.nombre,
+                "sucursales": suc_list
+            })
         db.close()
 
-        # 2. Ejecutar raspado inicial con sesiones independientes por sucursal
-        for t in targets:
-            job_id = None
-            db_job: Session = SessionLocal()
+        # 4. Poblar cada comercio
+        for cdata in comercios_data:
+            cslug = cdata["slug"]
+            cnombre = cdata["nombre"]
+            sucs_necesitan = [s for s in cdata["sucursales"] if s["precios_count"] < 100]
+
+            if not sucs_necesitan:
+                logger.info(f"[{cnombre}] Todas las sucursales ya tienen catálogo cargado.")
+                continue
+
+            logger.info(f"[{cnombre}] Poblando {len(sucs_necesitan)} sucursales...")
+
+            # Primero poblamos la sucursal principal con run_scraper_job_task
+            first_suc = sucs_necesitan[0]
+            db_job = SessionLocal()
             try:
-                precios_count = db_job.query(PrecioHistorial).filter(
-                    PrecioHistorial.sucursal_id == t["sucursal_id"]
-                ).count()
-
-                # Si ya tiene más de 1000 productos cargados, la sucursal está completa
-                if precios_count >= 1000:
-                    continue
-
-                logger.info(f"Poblando datos para {t['comercio_nombre']} / {t['sucursal_nombre']} (actuales: {precios_count})...")
                 job_id = uuid.uuid4()
                 job = ScraperJob(
                     id=job_id,
-                    comercio_id=t["comercio_id"],
-                    sucursal_id=t["sucursal_id"],
+                    comercio_id=cdata["id"],
+                    sucursal_id=first_suc["id"],
                     estado="PENDING",
                     total_scrapeados=0,
                     total_errores=0,
@@ -92,14 +111,68 @@ def seed_database():
             finally:
                 db_job.close()
 
-            # Ejecutar la tarea de scraping fuera de la sesión de base de datos
-            if job_id:
-                try:
-                    run_scraper_job_task(str(job_id), t["comercio_slug"], t["sucursal_nombre"], limit=t["seed_limit"])
-                except Exception as e:
-                    logger.error(f"Error ejecutando scraper para {t['sucursal_nombre']}: {e}")
+            limit = len(PRODUCTOS_CATALOGO_BASE) if cslug == "la-anonima" else None
+            try:
+                res = run_scraper_job_task(str(job_id), cslug, first_suc["nombre"], limit=limit)
+                logger.info(f"[{cnombre} / {first_suc['nombre']}] Tarea finalizada: {res}")
+            except Exception as e:
+                logger.error(f"[{cnombre} / {first_suc['nombre']}] Error en scraper: {e}")
+                continue
 
-        logger.info("¡Seeding completado con éxito!")
+            # Para las demás sucursales del mismo comercio que aún no tengan precios,
+            # propagamos los precios en lote en 0.5s desde la sucursal principal
+            otras_sucs = sucs_necesitan[1:]
+            if otras_sucs:
+                db_sync = SessionLocal()
+                try:
+                    now_dt = datetime.utcnow()
+                    base_prices = db_sync.query(PrecioHistorial).filter(
+                        PrecioHistorial.sucursal_id == first_suc["id"]
+                    ).all()
+
+                    if base_prices:
+                        for other_suc in otras_sucs:
+                            other_job = ScraperJob(
+                                id=uuid.uuid4(),
+                                comercio_id=cdata["id"],
+                                sucursal_id=other_suc["id"],
+                                estado="FINISHED",
+                                total_scrapeados=len(base_prices),
+                                total_errores=0,
+                                iniciado_en=now_dt,
+                                finalizado_en=now_dt,
+                            )
+                            db_sync.add(other_job)
+
+                            new_ph_list = []
+                            for bp in base_prices:
+                                new_ph_list.append(PrecioHistorial(
+                                    producto_id=bp.producto_id,
+                                    sucursal_id=other_suc["id"],
+                                    precio_lista=bp.precio_lista,
+                                    precio_oferta=bp.precio_oferta,
+                                    precio_bulto=bp.precio_bulto,
+                                    descripcion_bulto=bp.descripcion_bulto,
+                                    es_oferta_club=bp.es_oferta_club,
+                                    disponible=bp.disponible,
+                                    fecha_captura=now_dt
+                                ))
+
+                            import gc
+                            CHUNK_SZ = 300
+                            for ci in range(0, len(new_ph_list), CHUNK_SZ):
+                                db_sync.add_all(new_ph_list[ci:ci + CHUNK_SZ])
+                                db_sync.commit()
+                                db_sync.expunge_all()
+                                gc.collect()
+                            logger.info(f"[{cnombre} / {other_suc['nombre']}] Sincronizados {len(new_ph_list)} precios.")
+                except Exception as sync_err:
+                    db_sync.rollback()
+                    logger.error(f"[{cnombre}] Error sincronizando sucursales: {sync_err}")
+                finally:
+                    db_sync.close()
+
+        logger.info("¡Seeding completado con éxito para todas las sucursales!")
     except Exception as e:
         logger.error(f"Error durante seeding: {e}")
 

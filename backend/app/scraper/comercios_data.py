@@ -41,7 +41,6 @@ COMERCIOS: Dict[str, Dict[str, Any]] = {
         "color": "#E4002B",
         "sucursales": [
             {"codigo": "JUMBO_COMODORO", "nombre": "Comodoro Rivadavia", "provincia": "Chubut", "tipo_sucursal": "supermercado"},
-            {"codigo": "JUMBO_TRELEW", "nombre": "Trelew", "provincia": "Chubut", "tipo_sucursal": "mayorista"},
         ],
     },
     "vea": {

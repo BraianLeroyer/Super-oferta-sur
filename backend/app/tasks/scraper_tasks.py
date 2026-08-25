@@ -140,13 +140,7 @@ def run_scraper_job_task(job_id_str: str, comercio_query: str, sucursal_query: s
 
         # Ejecutar extracción asíncrona en bucle
         scraper = get_scraper(comercio_query, sucursal_query)
-
-        # Para cadenas VTEX, buscar marcas faltantes de otras cadenas
         brands_to_search = None
-        scraping_modo = comercio_cfg.get("scraping_modo", "")
-        if scraping_modo == "vtex" and limit is None:
-            brands_to_search = _get_missing_brands(db, comercio_cfg["slug"])
-            logger.info(f"[{comercio_cfg['slug']}] Expansion por marcas: {len(brands_to_search)} marcas a buscar.")
 
         extracted_items = _run_extraction_coro(scraper, limit, brands_to_search, precio_maximo)
 

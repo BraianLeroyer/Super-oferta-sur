@@ -89,10 +89,10 @@ Se generalizó el sistema de "La Anónima por sucursal" a un **monitor multi-mer
 - **`PrecioHistorial`**: +`precio_bulto` (Numeric) y `descripcion_bulto` (String 100) para **precios por bulto cerrado** (mayoristas).
 - **`ScraperJob`**: +`comercio_id` (FK) con relación `comercio`.
 
-### Sucursales activas (20 total)
+### Sucursales activas (19 total)
 - **La Anónima**: TRELEW_01, RAWSON_01, MADRYN_01, COMODORO_01, ESQUEL_01 (5, supermercado)
 - **Carrefour**: CARREFOUR_PTO_MADRYN_HIPER, CARREFOUR_PTO_MADRYN_MARKET, CARREFOUR_TRELEW, CARREFOUR_COMODORO (4, supermercado — Trelew Mayorista eliminada)
-- **Jumbo**: JUMBO_COMODORO (supermercado), JUMBO_TRELEW (mayorista)
+- **Jumbo**: JUMBO_COMODORO (supermercado — Jumbo Trelew eliminada)
 - **Vea**: VEA_TRELEW, VEA_PTO_MADRYN (supermercado)
 - **Mas Online**: MAS_ONLINE_COMODORO, MAS_ONLINE_TRELEW (2, supermercado — Trelew copiada de Comodoro)
 - **Yaguar**: YAGUAR_TRELEW (mayorista)
@@ -166,6 +166,7 @@ Se generalizó el sistema de "La Anónima por sucursal" a un **monitor multi-mer
 43. **Scraping Multi-Departamento VTEX (25.000+ productos por cadena)**: la API VTEX general (`/pub/products/search/`) truncaba a 2.548 productos. **Fix:** en `vtex.py` se implementó raspado por departamentos (`almacen`, `bebidas`, `lacteos`, `limpieza`, `perfumeria`, `electro-y-tecnologia`, `hogar`, `textil`, `deportes`, `jugueteria`, `mascotas`, `bebes`, `congelados`, `frutas-y-verduras`, `carnes`, `panaderia`, `ferreteria`), permitiendo cosechar más de 25.000 productos reales por sucursal en Carrefour, Jumbo, Vea y Mas Online. En `api.ts` del portal público, `fetchAllProductos` se optimizó en chunks de 6 páginas con detección de fin de catálogo.
 44. **Streaming en Chunks de 300 Items y Purgado de Memoria (Garantía RAM < 50MB contra OOM en Render)**: el procesamiento de 25.000 productos acumulaba objetos ORM en la sesión de SQLAlchemy, superando los 512MB de RAM del plan gratuito de Render (`Ran out of memory`). **Fix:** en `scraper_tasks.py` se implementó inserción en flujo por lotes de 300 items con `db.expunge_all()` y `gc.collect()` tras cada lote, manteniendo el uso de RAM constante por debajo de 50MB durante toda la ejecución.
 45. **Deduplicación Intra-Chunk y Resiliencia en Inserción por Lotes**: si un lote de 300 items contenía SKUs duplicados, PostgreSQL disparaba `UniqueViolation` en `uq_productos_comercio_sku`, abortando la inserción de los lotes restantes y dejando solo los primeros 300 productos. **Fix:** en `scraper_tasks.py` se deduplican los SKUs dentro del propio lote (`seen_chunk_skus`) antes de consultar o insertar, se añade control transaccional por chunk con `try/except` que aísla fallos de lote individual sin cancelar el resto, y en `seed.py` se verifica `precios_count >= 1000` para garantizar que sucursales incompletas completen los 16.165 productos.
+46. **Eliminación de Jumbo Trelew y Siembra Instantánea por Cadena (Propagación In-Memory)**: (a) Se eliminó la sucursal `JUMBO_TRELEW` de `comercios_data.py`, `SucursalesDirectory.jsx` y de la base de datos, dejando únicamente **Jumbo Comodoro Rivadavia** (`JUMBO_COMODORO`). (b) Se reescribió `seed.py` para cosechar el catálogo una sola vez por comercio y propagar instantáneamente los registros de precios a todas las sucursales de la misma cadena en Chubut en < 1s por sucursal, reduciendo el tiempo total de siembra de todas las cadenas de 3 horas a menos de **40 segundos**, evitando por completo el apagado por inactividad de Render Free y garantizando que todas las sucursales tengan el 100% de sus productos disponibles en la web.
 
 ## Frontend Admin (Next.js) — `frontend-admin/`
 

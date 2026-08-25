@@ -165,7 +165,7 @@ class WooCommerceScraper(BaseScraper):
         while len(productos) < max_total:
             url = f"{self.base_url}{api_path}?per_page={self.PAGE_SIZE}&page={page}&orderby=id&order=asc"
             try:
-                await random_delay_async(1.0, 2.0)
+                await random_delay_async(0.05, 0.1)
                 async with self._new_client() as client:
                     resp = await client.get(url)
                 if resp.status_code in (403, 429):

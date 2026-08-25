@@ -223,7 +223,7 @@ class VtexScraper(BaseScraper):
                 _to = _from + self.PAGE_SIZE - 1
                 url = f"{self.base_url}{self.API_PATH}{dep_path}?_from={_from}&_to={_to}"
                 try:
-                    await random_delay_async(0.2, 0.4)
+                    await random_delay_async(0.05, 0.1)
                     async with self._new_client() as client:
                         resp = await client.get(url, headers={"Accept": "application/json"})
                     if resp.status_code in (403, 429):
