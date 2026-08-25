@@ -84,10 +84,12 @@ def seed_database():
         def _min_expected(slug: str) -> int:
             if slug == "la-anonima":
                 return 10000
-            elif slug in ("carrefour", "jumbo", "vea", "mas-online"):
-                return 1000
+            elif slug == "carrefour":
+                return 10000
+            elif slug in ("jumbo", "vea", "mas-online"):
+                return 3000
             else:  # yaguar
-                return 150
+                return 1000
 
         # 4. Poblar cada comercio
         for cdata in comercios_data:
