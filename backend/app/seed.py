@@ -135,11 +135,29 @@ def seed_database():
                 db_sync = SessionLocal()
                 try:
                     now_dt = datetime.utcnow()
-                    base_prices = db_sync.query(PrecioHistorial).filter(
-                        PrecioHistorial.sucursal_id == first_suc["id"]
-                    ).all()
+                    base_prices = [
+                        {
+                            "producto_id": row[0],
+                            "precio_lista": row[1],
+                            "precio_oferta": row[2],
+                            "precio_bulto": row[3],
+                            "descripcion_bulto": row[4],
+                            "es_oferta_club": row[5],
+                            "disponible": row[6],
+                        }
+                        for row in db_sync.query(
+                            PrecioHistorial.producto_id,
+                            PrecioHistorial.precio_lista,
+                            PrecioHistorial.precio_oferta,
+                            PrecioHistorial.precio_bulto,
+                            PrecioHistorial.descripcion_bulto,
+                            PrecioHistorial.es_oferta_club,
+                            PrecioHistorial.disponible
+                        ).filter(PrecioHistorial.sucursal_id == first_suc["id"]).all()
+                    ]
 
                     if base_prices:
+                        import gc
                         for other_suc in otras_sucs:
                             other_job = ScraperJob(
                                 id=uuid.uuid4(),
@@ -152,29 +170,34 @@ def seed_database():
                                 finalizado_en=now_dt,
                             )
                             db_sync.add(other_job)
+                            db_sync.commit()
 
-                            new_ph_list = []
-                            for bp in base_prices:
-                                new_ph_list.append(PrecioHistorial(
-                                    producto_id=bp.producto_id,
-                                    sucursal_id=other_suc["id"],
-                                    precio_lista=bp.precio_lista,
-                                    precio_oferta=bp.precio_oferta,
-                                    precio_bulto=bp.precio_bulto,
-                                    descripcion_bulto=bp.descripcion_bulto,
-                                    es_oferta_club=bp.es_oferta_club,
-                                    disponible=bp.disponible,
-                                    fecha_captura=now_dt
-                                ))
-
-                            import gc
                             CHUNK_SZ = 300
-                            for ci in range(0, len(new_ph_list), CHUNK_SZ):
-                                db_sync.add_all(new_ph_list[ci:ci + CHUNK_SZ])
+                            for ci in range(0, len(base_prices), CHUNK_SZ):
+                                chunk_data = base_prices[ci : ci + CHUNK_SZ]
+                                chunk_models = [
+                                    PrecioHistorial(
+                                        producto_id=bp["producto_id"],
+                                        sucursal_id=other_suc["id"],
+                                        precio_lista=bp["precio_lista"],
+                                        precio_oferta=bp["precio_oferta"],
+                                        precio_bulto=bp["precio_bulto"],
+                                        descripcion_bulto=bp["descripcion_bulto"],
+                                        es_oferta_club=bp["es_oferta_club"],
+                                        disponible=bp["disponible"],
+                                        fecha_captura=now_dt
+                                    )
+                                    for bp in chunk_data
+                                ]
+                                db_sync.add_all(chunk_models)
                                 db_sync.commit()
-                                db_sync.expunge_all()
+                                for m in chunk_models:
+                                    try:
+                                        db_sync.expunge(m)
+                                    except Exception:
+                                        pass
                                 gc.collect()
-                            logger.info(f"[{cnombre} / {other_suc['nombre']}] Sincronizados {len(new_ph_list)} precios.")
+                            logger.info(f"[{cnombre} / {other_suc['nombre']}] Sincronizados {len(base_prices)} precios.")
                 except Exception as sync_err:
                     db_sync.rollback()
                     logger.error(f"[{cnombre}] Error sincronizando sucursales: {sync_err}")
