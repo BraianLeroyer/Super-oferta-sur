@@ -81,17 +81,26 @@ def seed_database():
             })
         db.close()
 
+        def _min_expected(slug: str) -> int:
+            if slug == "la-anonima":
+                return 10000
+            elif slug in ("carrefour", "jumbo", "vea", "mas-online"):
+                return 1000
+            else:  # yaguar
+                return 150
+
         # 4. Poblar cada comercio
         for cdata in comercios_data:
             cslug = cdata["slug"]
             cnombre = cdata["nombre"]
-            sucs_necesitan = [s for s in cdata["sucursales"] if s["precios_count"] < 100]
+            min_exp = _min_expected(cslug)
+            sucs_necesitan = [s for s in cdata["sucursales"] if s["precios_count"] < min_exp]
 
             if not sucs_necesitan:
                 logger.info(f"[{cnombre}] Todas las sucursales ya tienen catálogo cargado.")
                 continue
 
-            logger.info(f"[{cnombre}] Poblando {len(sucs_necesitan)} sucursales...")
+            logger.info(f"[{cnombre}] Poblando {len(sucs_necesitan)} sucursales (umbral mínimo: {min_exp} productos)...")
 
             # Primero poblamos la sucursal principal con run_scraper_job_task
             first_suc = sucs_necesitan[0]
