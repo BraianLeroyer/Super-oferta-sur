@@ -214,14 +214,22 @@ export async function fetchAllProductos(params: {
   return allProducts.slice(0, maxItems);
 }
 
+const _categoriesCache = new Map<number, string[]>();
+
 export async function fetchCategorias(comercio_id?: number): Promise<string[]> {
+  const cacheKey = comercio_id || 0;
+  if (_categoriesCache.has(cacheKey)) {
+    return _categoriesCache.get(cacheKey)!;
+  }
   try {
     const query = new URLSearchParams();
     if (comercio_id) query.set('comercio_id', comercio_id.toString());
     const suffix = query.toString() ? `?${query.toString()}` : '';
     const res = await fetch(`${API_BASE_URL}/products/categories${suffix}`);
     if (!res.ok) return [];
-    return await res.json();
+    const data = await res.json();
+    _categoriesCache.set(cacheKey, data);
+    return data;
   } catch (err) {
     console.error('Error cargando categorías:', err);
     return [];

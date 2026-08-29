@@ -278,6 +278,10 @@ def get_product_suggestions(
         d = _producto_out_dict(prod, latest_by_product.get(prod.id))
         results.append(d)
     return results
+import time
+
+_CATEGORIAS_CACHE = {}  # {comercio_id: (timestamp, [categorias])}
+_CACHE_TTL = 300  # 5 minutos
 
 
 @router.get("/categories", response_model=List[str])
@@ -289,6 +293,13 @@ def get_categorias(
     GET /api/v1/products/categories
     Retorna la lista de categorías disponibles en el catálogo (opcional por comercio).
     """
+    now = time.time()
+    cache_key = comercio_id or 0
+    if cache_key in _CATEGORIAS_CACHE:
+        ts, cached_cats = _CATEGORIAS_CACHE[cache_key]
+        if now - ts < _CACHE_TTL:
+            return cached_cats
+
     q = (
         db.query(Producto.categoria)
         .filter(Producto.categoria.isnot(None), Producto.categoria != "")
@@ -296,7 +307,9 @@ def get_categorias(
     if comercio_id:
         q = q.filter(Producto.comercio_id == comercio_id)
     rows = q.distinct().order_by(Producto.categoria.asc()).all()
-    return [row[0] for row in rows]
+    cats = [row[0] for row in rows]
+    _CATEGORIAS_CACHE[cache_key] = (now, cats)
+    return cats
 
 
 import unicodedata

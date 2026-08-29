@@ -4,10 +4,10 @@ import ProductCard from './ProductCard';
 import ProductDetailModal from './ProductDetailModal';
 import ComparisonModal from './ComparisonModal';
 import ShoppingListChat from './ShoppingListChat';
-import { fetchComercios, fetchSucursales, fetchAllProductos, fetchCategorias, fetchSuggestions, fetchCompararPorProducto } from '../lib/api';
+import { fetchComercios, fetchSucursales, fetchProductos, fetchCategorias, fetchSuggestions, fetchCompararPorProducto } from '../lib/api';
 import { Filter, Search, Loader2, Sparkles, AlertCircle, ChevronDown, ShieldCheck, ShoppingCart, X } from 'lucide-react';
 
-const PAGE_INCREMENT = 60;
+const PAGE_SIZE = 60;
 
 export default function ProductCatalogApp() {
   const [comercios, setComercios] = useState([]);
@@ -18,12 +18,14 @@ export default function ProductCatalogApp() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [onlyOffers, setOnlyOffers] = useState(false);
   const [onlyBulto, setOnlyBulto] = useState(false);
   const [ofertaSemanal, setOfertaSemanal] = useState(false);
   const [categorias, setCategorias] = useState([]);
   const [selectedCategoria, setSelectedCategoria] = useState('');
-  const [visibleCount, setVisibleCount] = useState(PAGE_INCREMENT);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -74,7 +76,8 @@ export default function ProductCatalogApp() {
     setDebouncedSearch('');
     setOnlyBulto(false);
     setOfertaSemanal(false);
-    setVisibleCount(PAGE_INCREMENT);
+    setPage(1);
+    setHasMore(true);
     setLoading(true);
 
     fetchSucursales(selectedComercio.id)
@@ -153,10 +156,31 @@ export default function ProductCatalogApp() {
     };
   }, [showCatModal]);
 
-  // Cargar productos al cambiar comercio, sucursal o filtros
+  const filterValidProducts = (data) => {
+    let filtered = (data || []).filter((p) => {
+      const list = Number(p.precio_actual_lista || 0);
+      const offer = Number(p.precio_actual_oferta || 0);
+      const bulto = Number(p.precio_bulto || 0);
+      return list > 0 || offer > 0 || bulto > 0;
+    });
+
+    if (onlyOffers && ofertaSemanal) {
+      filtered = filtered.filter((p) => (Boolean(p.precio_actual_oferta) && Number(p.precio_actual_oferta) > 0) || p.es_oferta_semanal);
+    } else if (onlyOffers) {
+      filtered = filtered.filter((p) => Boolean(p.precio_actual_oferta) && Number(p.precio_actual_oferta) > 0);
+    } else if (ofertaSemanal) {
+      filtered = filtered.filter((p) => p.es_oferta_semanal);
+    }
+    return filtered;
+  };
+
+  // Cargar productos al cambiar comercio, sucursal o filtros (petición única ultra rápida)
   useEffect(() => {
     const seq = ++searchSeqRef.current;
     setLoading(true);
+    setPage(1);
+    setHasMore(true);
+
     const params = {
       search: debouncedSearch || undefined,
       sucursal_id: selectedBranch ? selectedBranch.id : undefined,
@@ -164,32 +188,16 @@ export default function ProductCatalogApp() {
       categoria: selectedCategoria || undefined,
       bulto_cerrado: onlyBulto || undefined,
       oferta_semanal: (ofertaSemanal && !onlyOffers) ? true : undefined,
+      page: 1,
+      limit: PAGE_SIZE,
     };
 
-    fetchAllProductos(params)
+    fetchProductos(params)
       .then((data) => {
-        // Ignorar respuestas obsoletas (race condition entre requests)
         if (seq !== searchSeqRef.current) return;
-        // Filtrar productos con al menos un precio válido (> 0)
-        let filtered = data.filter(p => {
-          const list = Number(p.precio_actual_lista || 0);
-          const offer = Number(p.precio_actual_oferta || 0);
-          const bulto = Number(p.precio_bulto || 0);
-          return list > 0 || offer > 0 || bulto > 0;
-        });
-
-        if (onlyOffers && ofertaSemanal) {
-          // Ambos activos: mostrar productos que tengan oferta regular O sean oferta semanal
-          filtered = filtered.filter(p => (Boolean(p.precio_actual_oferta) && Number(p.precio_actual_oferta) > 0) || p.es_oferta_semanal);
-        } else if (onlyOffers) {
-          // Solo ofertas regulares con precio > 0
-          filtered = filtered.filter(p => Boolean(p.precio_actual_oferta) && Number(p.precio_actual_oferta) > 0);
-        } else if (ofertaSemanal) {
-          // Solo oferta semanal
-          filtered = filtered.filter(p => p.es_oferta_semanal);
-        }
+        const filtered = filterValidProducts(data);
         setProducts(filtered);
-        setVisibleCount(PAGE_INCREMENT);
+        setHasMore((data || []).length >= PAGE_SIZE);
         setLoading(false);
       })
       .catch((err) => {
@@ -198,6 +206,37 @@ export default function ProductCatalogApp() {
         setLoading(false);
       });
   }, [selectedComercio, selectedBranch, debouncedSearch, onlyOffers, onlyBulto, ofertaSemanal, selectedCategoria]);
+
+  const loadMoreProducts = async () => {
+    if (loadingMore || !hasMore) return;
+    const nextPage = page + 1;
+    setLoadingMore(true);
+
+    const params = {
+      search: debouncedSearch || undefined,
+      sucursal_id: selectedBranch ? selectedBranch.id : undefined,
+      comercio_id: selectedComercio ? selectedComercio.id : undefined,
+      categoria: selectedCategoria || undefined,
+      bulto_cerrado: onlyBulto || undefined,
+      oferta_semanal: (ofertaSemanal && !onlyOffers) ? true : undefined,
+      page: nextPage,
+      limit: PAGE_SIZE,
+    };
+
+    try {
+      const data = await fetchProductos(params);
+      const filtered = filterValidProducts(data);
+      setProducts((prev) => [...prev, ...filtered]);
+      setPage(nextPage);
+      if ((data || []).length < PAGE_SIZE) {
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.error('Error cargando más productos:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const selectSuggestion = (product) => {
     suggestionSeqRef.current++;
@@ -538,14 +577,14 @@ export default function ProductCatalogApp() {
           <>
             <div className="flex items-center justify-between gap-2 text-[11px] sm:text-xs text-slate-500 font-semibold flex-wrap">
               <span>
-                Mostrando {Math.min(visibleCount, products.length)} de {products.length} productos
+                Mostrando {products.length} producto{products.length === 1 ? '' : 's'}
               </span>
-              {visibleCount < products.length && (
-                <span className="text-anonima-red">{products.length - visibleCount} sin mostrar</span>
+              {hasMore && (
+                <span className="text-emerald-600">Hay más productos disponibles</span>
               )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
-              {products.slice(0, visibleCount).map((product) => (
+              {products.map((product) => (
                 <ProductCard
                   key={`${product.comercio_id || ''}-${product.id}`}
                   product={product}
@@ -556,14 +595,25 @@ export default function ProductCatalogApp() {
                 />
               ))}
             </div>
-            {visibleCount < products.length && (
-              <div className="flex justify-center pt-3 sm:pt-4">
+            {hasMore && (
+              <div className="flex justify-center pt-4 sm:pt-6">
                 <button
-                  onClick={() => setVisibleCount(v => v + PAGE_INCREMENT)}
-                  className="flex items-center gap-2 px-5 sm:px-6 py-2.5 sm:py-3 bg-anonima-red hover:bg-anonima-darkred text-white text-xs sm:text-sm font-bold rounded-xl shadow transition-colors"
+                  type="button"
+                  onClick={loadMoreProducts}
+                  disabled={loadingMore}
+                  className="flex items-center gap-2 px-6 sm:px-8 py-3 bg-anonima-red hover:bg-darkred text-white text-xs sm:text-sm font-bold rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50"
                 >
-                  <ChevronDown className="w-4 h-4" />
-                  Cargar más ({Math.min(PAGE_INCREMENT, products.length - visibleCount)})
+                  {loadingMore ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Cargando más productos...
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-4 h-4" />
+                      Cargar más productos
+                    </>
+                  )}
                 </button>
               </div>
             )}
