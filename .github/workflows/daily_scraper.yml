@@ -1,0 +1,35 @@
+name: Scraping Diario de Supermercados
+
+on:
+  schedule:
+    # 6:00 AM hora de Argentina (ART es UTC-3 -> 09:00 UTC)
+    - cron: '0 9 * * *'
+  workflow_dispatch: # Permite ejecutarlo manualmente con un clic en GitHub cuando quieras probarlo
+
+jobs:
+  scrape-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Instalar dependencias
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Ejecutar Scraping Diario
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          cd backend
+          python -m app.daily_scrape
